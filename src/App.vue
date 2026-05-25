@@ -40,7 +40,7 @@ const { theme, setTheme, cycleTheme } = useTheme();
 const toast = useToast();
 
 // ─── PDF ───
-const { pdfUrl, pdfLoading, lastError } = usePdf(
+const { pdfUrl, pdfBytes, pdfLoading, lastError } = usePdf(
   editorContent,
   selectedTemplate,
   toast
@@ -192,7 +192,7 @@ async function handleOpenFolder() {
 
 // ─── Export PDF ───
 async function handleExportPdf() {
-  if (!pdfUrl.value) {
+  if (!pdfBytes.value || pdfBytes.value.length === 0) {
     toast.warning("No PDF to export. Open a file first.");
     return;
   }
@@ -205,13 +205,7 @@ async function handleExportPdf() {
     });
     if (!path || typeof path !== "string") return;
 
-    // Fetch the blob and convert to Uint8Array
-    const response = await fetch(pdfUrl.value);
-    const blob = await response.blob();
-    const arrayBuffer = await blob.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-
-    await writeFile(path, uint8Array);
+    await writeFile(path, pdfBytes.value);
     toast.success(`Saved to ${path.split(/[/\\]/).pop() || path}`);
   } catch (err) {
     console.error("Failed to export PDF:", err);

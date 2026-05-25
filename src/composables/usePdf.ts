@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { useToast } from "./useToast";
 
 const pdfUrl = ref<string | null>(null);
+const pdfBytes = ref<Uint8Array | null>(null);
 const pdfLoading = ref(false);
 const lastError = ref<string | null>(null);
 
@@ -35,6 +36,7 @@ async function generatePdf(
     });
 
     const uint8Array = new Uint8Array(bytes);
+    pdfBytes.value = uint8Array;
     const blob = new Blob([uint8Array], { type: "application/pdf" });
     revokeCurrentUrl();
 
@@ -67,6 +69,17 @@ export function usePdf(
       if (debounceTimer) {
         clearTimeout(debounceTimer);
       }
+
+      // Skip compilation if markdown is empty
+      if (!markdownRef.value || markdownRef.value.trim().length === 0) {
+        pdfLoading.value = false;
+        lastError.value = null;
+        pdfUrl.value = null;
+        pdfBytes.value = null;
+        revokeCurrentUrl();
+        return;
+      }
+
       debounceTimer = setTimeout(() => {
         generatePdf(markdownRef.value, templateRef.value, toastApi);
       }, debounceMs);
@@ -76,6 +89,7 @@ export function usePdf(
 
   return {
     pdfUrl,
+    pdfBytes,
     pdfLoading,
     lastError,
     revokeCurrentUrl,

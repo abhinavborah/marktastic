@@ -56,7 +56,7 @@ function togglePane(mode: PaneMode) {
     <!-- Editor pane -->
     <div
       v-if="showEditor"
-      class="h-full overflow-hidden transition-all"
+      class="h-full overflow-hidden"
       :style="isBoth ? { width: editorWidth + '%' } : { width: '100%' }"
     >
       <slot name="editor" />
@@ -73,7 +73,7 @@ function togglePane(mode: PaneMode) {
     <!-- Preview pane -->
     <div
       v-if="showPreview"
-      class="h-full overflow-hidden transition-all"
+      class="h-full overflow-hidden"
       :style="isBoth ? { width: 100 - editorWidth + '%' } : { width: '100%' }"
     >
       <slot name="preview" />
