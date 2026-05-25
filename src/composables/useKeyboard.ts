@@ -8,6 +8,7 @@ export interface KeyboardActions {
   onExportPdf: () => void;
   onTogglePane: (mode: PaneMode) => void;
   onCycleTheme: () => void;
+  onToggleWordWrap?: () => void;
 }
 
 const isMac = navigator.platform.toLowerCase().includes("mac");
@@ -51,6 +52,12 @@ export function useKeyboard(actions: KeyboardActions) {
       case "t":
         e.preventDefault();
         actions.onCycleTheme();
+        break;
+      case "w":
+        if (e.shiftKey) {
+          e.preventDefault();
+          actions.onToggleWordWrap?.();
+        }
         break;
     }
   }

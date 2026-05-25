@@ -92,3 +92,27 @@
     border-radius: 2px;
   }
 }
+
+/* CodeMirror editor fills container height */
+.cm-editor {
+  height: 100%;
+}
+
+.cm-scroller {
+  overflow: auto;
+  min-height: 100%;
+}
+
+/* CodeMirror gutter with solid background so text doesn't show through */
+.cm-gutters {
+  background-color: hsl(var(--muted) / 1) !important;
+  border-right: 1px solid hsl(var(--border) / 1) !important;
+}
+
+.cm-gutter {
+  background-color: transparent !important;
+}
+
+.cm-lineNumbers .cm-gutterElement {
+  color: hsl(var(--muted-foreground) / 1) !important;
+}

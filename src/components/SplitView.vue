@@ -5,10 +5,12 @@ type PaneMode = "both" | "editor" | "preview";
 
 const props = defineProps<{
   modelValue: PaneMode;
+  wordWrap?: boolean;
 }>();
 
 const emit = defineEmits<{
   (e: "update:modelValue", mode: PaneMode): void;
+  (e: "toggleWordWrap"): void;
 }>();
 
 const paneMode = computed({
@@ -114,6 +116,19 @@ function togglePane(mode: PaneMode) {
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <line x1="15" y1="3" x2="15" y2="21" />
+        </svg>
+      </button>
+
+      <div class="w-px h-4 bg-border mx-0.5" />
+
+      <button
+        class="p-1.5 rounded hover:bg-muted transition-colors"
+        :class="{ 'bg-muted': wordWrap }"
+        title="Toggle word wrap (⌘/Ctrl+Shift+W)"
+        @click="$emit('toggleWordWrap')"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 7h16M4 12h12M4 17h8" />
         </svg>
       </button>
     </div>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount, watch, shallowRef } from "vue";
-import { EditorView, keymap } from "@codemirror/view";
+import { EditorView, keymap, scrollPastEnd } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { oneDark } from "@codemirror/theme-one-dark";
@@ -12,6 +12,7 @@ import type { ThemeMode } from "../types";
 const props = defineProps<{
   modelValue: string;
   theme: ThemeMode;
+  wordWrap?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -22,6 +23,7 @@ const emit = defineEmits<{
 const editorContainer = ref<HTMLDivElement | null>(null);
 const view = shallowRef<EditorView | null>(null);
 const themeCompartment = new Compartment();
+const wrapCompartment = new Compartment();
 
 function getThemeExtensions(isDark: boolean) {
   const extensions: any[] = [
@@ -38,11 +40,10 @@ function getThemeExtensions(isDark: boolean) {
         },
         ".cm-gutters": {
           padding: "12px 0",
-          borderRight: "1px solid var(--border)",
-          backgroundColor: "transparent",
+          borderRight: "1px solid hsl(var(--border) / 1)",
         },
         ".cm-lineNumbers .cm-gutterElement": {
-          color: "hsl(var(--muted-foreground))",
+          color: "hsl(var(--muted-foreground) / 1)",
           padding: "0 8px",
         },
       },
@@ -68,12 +69,14 @@ function getExtensions(theme: ThemeMode) {
     lineNumbers(),
     markdown(),
     syntaxHighlighting(defaultHighlightStyle),
+    scrollPastEnd(),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         emit("update:modelValue", update.state.doc.toString());
       }
     }),
     themeCompartment.of(getThemeExtensions(isDark)),
+    wrapCompartment.of(props.wordWrap ? EditorView.lineWrapping : []),
   ];
 }
 
@@ -113,6 +116,17 @@ watch(
         window.matchMedia("(prefers-color-scheme: dark)").matches);
     view.value.dispatch({
       effects: themeCompartment.reconfigure(getThemeExtensions(isDark)),
+    });
+  }
+);
+
+// Toggle word wrap when prop changes
+watch(
+  () => props.wordWrap,
+  (newVal) => {
+    if (!view.value) return;
+    view.value.dispatch({
+      effects: wrapCompartment.reconfigure(newVal ? EditorView.lineWrapping : []),
     });
   }
 );

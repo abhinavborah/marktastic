@@ -30,6 +30,7 @@ const folderFiles = ref<{ name: string; content: string }[]>([]);
 const reachableFiles = ref<string[]>([]);
 const isFolderMode = ref(false);
 const paneMode = ref<PaneMode>("both");
+const wordWrap = ref(false);
 
 const hasContent = computed(() => editorContent.value.trim().length > 0);
 
@@ -60,6 +61,9 @@ useKeyboard({
     paneMode.value = mode;
   },
   onCycleTheme: () => cycleTheme(),
+  onToggleWordWrap: () => {
+    wordWrap.value = !wordWrap.value;
+  },
 });
 
 // ─── Window Title ───
@@ -241,11 +245,12 @@ async function handleExportPdf() {
       />
 
       <!-- Editor + Preview split view -->
-      <SplitView v-else v-model="paneMode">
+      <SplitView v-else v-model="paneMode" :word-wrap="wordWrap" @toggle-word-wrap="wordWrap = !wordWrap">
         <template #editor>
           <EditorPane
             v-model="editorContent"
             :theme="theme"
+            :word-wrap="wordWrap"
             @editor-ready="(v: any) => editorViewRef = v"
           />
         </template>
