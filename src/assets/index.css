@@ -117,11 +117,6 @@
   color: hsl(var(--muted-foreground) / 1) !important;
 }
 
-/* Disable iframe pointer events during split-pane drag so mouseup fires */
-#split-container[data-dragging="true"] iframe {
-  pointer-events: none !important;
-}
-
 /* Optimize pane width changes during drag */
 #split-container > div {
   will-change: width;

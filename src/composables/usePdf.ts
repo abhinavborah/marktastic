@@ -2,20 +2,11 @@ import { ref, watch, type Ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import type { useToast } from "./useToast";
 
-const pdfUrl = ref<string | null>(null);
 const pdfBytes = ref<Uint8Array | null>(null);
 const pdfLoading = ref(false);
 const lastError = ref<string | null>(null);
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-let currentBlobUrl: string | null = null;
-
-function revokeCurrentUrl() {
-  if (currentBlobUrl) {
-    URL.revokeObjectURL(currentBlobUrl);
-    currentBlobUrl = null;
-  }
-}
 
 async function generatePdf(
   markdown: string,
@@ -35,13 +26,7 @@ async function generatePdf(
       templateName,
     });
 
-    const uint8Array = new Uint8Array(bytes);
-    pdfBytes.value = uint8Array;
-    const blob = new Blob([uint8Array], { type: "application/pdf" });
-    revokeCurrentUrl();
-
-    currentBlobUrl = URL.createObjectURL(blob);
-    pdfUrl.value = currentBlobUrl;
+    pdfBytes.value = new Uint8Array(bytes);
 
     if (toastApi) {
       toastApi.success("PDF ready", 2000);
@@ -74,9 +59,7 @@ export function usePdf(
       if (!markdownRef.value || markdownRef.value.trim().length === 0) {
         pdfLoading.value = false;
         lastError.value = null;
-        pdfUrl.value = null;
         pdfBytes.value = null;
-        revokeCurrentUrl();
         return;
       }
 
@@ -88,10 +71,8 @@ export function usePdf(
   );
 
   return {
-    pdfUrl,
     pdfBytes,
     pdfLoading,
     lastError,
-    revokeCurrentUrl,
   };
 }

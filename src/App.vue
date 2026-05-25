@@ -9,7 +9,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import { useTheme } from "./composables/useTheme";
 import { usePdf } from "./composables/usePdf";
-import { useScrollSync } from "./composables/useScrollSync";
+import { usePdfRenderer } from "./composables/usePdfRenderer";
 import { useToast } from "./composables/useToast";
 import { useKeyboard } from "./composables/useKeyboard";
 import type { PaneMode } from "./composables/useKeyboard";
@@ -44,16 +44,20 @@ const { theme, setTheme, cycleTheme } = useTheme();
 const toast = useToast();
 
 // ─── PDF ───
-const { pdfUrl, pdfBytes, pdfLoading, lastError } = usePdf(
+const { pdfBytes, pdfLoading, lastError } = usePdf(
   editorContent,
   selectedTemplate,
   toast
 );
 
-// ─── Scroll Sync ───
-const editorViewRef = ref<any>(null);
-const previewIframeRef = ref<HTMLIFrameElement | null>(null);
-useScrollSync(editorViewRef, previewIframeRef);
+// ─── PDF Image Renderer ───
+const { pages, rendering: imageRendering, renderError } = usePdfRenderer(
+  pdfBytes,
+  zoomLevel
+);
+
+const previewLoading = computed(() => pdfLoading.value || imageRendering.value);
+const previewError = computed(() => lastError.value || renderError.value);
 
 // ─── Keyboard Shortcuts ───
 useKeyboard({
@@ -303,16 +307,13 @@ async function handleExportPdf() {
             v-model="editorContent"
             :theme="theme"
             :word-wrap="wordWrap"
-            @editor-ready="(v: any) => editorViewRef = v"
           />
         </template>
         <template #preview>
           <PreviewPane
-            :pdf-url="pdfUrl"
-            :loading="pdfLoading"
-            :error="lastError"
-            :zoom="zoomLevel"
-            @iframe-ready="(el: HTMLIFrameElement) => previewIframeRef = el"
+            :pages="pages"
+            :rendering="previewLoading"
+            :error="previewError"
           />
         </template>
       </SplitView>

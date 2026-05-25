@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 mod md_to_typst;
+mod pdfium_renderer;
 mod typst_world;
 mod wikilinks;
 
@@ -173,6 +174,16 @@ fn get_templates() -> Result<Vec<String>, String> {
     Ok(templates)
 }
 
+/// Render PDF pages to PNG images using PDFium.
+#[tauri::command]
+fn render_pdf_pages(
+    pdf_bytes: Vec<u8>,
+    zoom: f64,
+    device_pixel_ratio: f64,
+) -> Result<Vec<String>, String> {
+    pdfium_renderer::render_pdf_pages(&pdf_bytes, zoom, device_pixel_ratio)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -187,6 +198,7 @@ pub fn run() {
             open_file_path,
             open_folder,
             get_templates,
+            render_pdf_pages,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
