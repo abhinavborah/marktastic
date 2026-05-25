@@ -3,15 +3,21 @@ import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { writeFile } from "@tauri-apps/plugin-fs";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import { useTheme } from "./composables/useTheme";
 import { usePdf } from "./composables/usePdf";
 import { useScrollSync } from "./composables/useScrollSync";
+import { useToast } from "./composables/useToast";
+import { useKeyboard } from "./composables/useKeyboard";
+import type { PaneMode } from "./composables/useKeyboard";
+
 import Toolbar from "./components/Toolbar.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import SplitView from "./components/SplitView.vue";
 import EditorPane from "./components/EditorPane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
+import ToastContainer from "./components/ToastContainer.vue";
 
 // ─── State ───
 const editorContent = ref("");
@@ -23,21 +29,56 @@ const currentFolderPath = ref<string | null>(null);
 const folderFiles = ref<{ name: string; content: string }[]>([]);
 const reachableFiles = ref<string[]>([]);
 const isFolderMode = ref(false);
+const paneMode = ref<PaneMode>("both");
 
 const hasContent = computed(() => editorContent.value.trim().length > 0);
 
 // ─── Theme ───
-const { theme, setTheme } = useTheme();
+const { theme, setTheme, cycleTheme } = useTheme();
+
+// ─── Toast ───
+const toast = useToast();
 
 // ─── PDF ───
-// Always uses convert_md_to_pdf with the current editorContent as the single source of truth.
-// In folder mode, the merged editor content is passed directly — edits are reflected in the preview.
-const { pdfUrl, pdfLoading, lastError } = usePdf(editorContent, selectedTemplate);
+const { pdfUrl, pdfLoading, lastError } = usePdf(
+  editorContent,
+  selectedTemplate,
+  toast
+);
 
 // ─── Scroll Sync ───
 const editorViewRef = ref<any>(null);
 const previewIframeRef = ref<HTMLIFrameElement | null>(null);
 useScrollSync(editorViewRef, previewIframeRef);
+
+// ─── Keyboard Shortcuts ───
+useKeyboard({
+  onOpenFile: () => handleOpenFile(),
+  onOpenFolder: () => handleOpenFolder(),
+  onExportPdf: () => handleExportPdf(),
+  onTogglePane: (mode: PaneMode) => {
+    paneMode.value = mode;
+  },
+  onCycleTheme: () => cycleTheme(),
+});
+
+// ─── Window Title ───
+async function updateWindowTitle() {
+  try {
+    const appWindow = getCurrentWebviewWindow();
+    if (currentFilePath.value) {
+      const fileName = currentFilePath.value.split(/[/\\]/).pop() || "untitled";
+      await appWindow.setTitle(`Marktastic — ${fileName}`);
+    } else if (currentFolderPath.value) {
+      const folderName = currentFolderPath.value.split(/[/\\]/).pop() || "folder";
+      await appWindow.setTitle(`Marktastic — ${folderName}`);
+    } else {
+      await appWindow.setTitle("Marktastic");
+    }
+  } catch {
+    // webviewWindow API may not be available in all contexts
+  }
+}
 
 // ─── Load templates on mount ───
 onMounted(async () => {
@@ -70,8 +111,14 @@ async function handleOpenFile() {
     reachableFiles.value = [];
     isFolderMode.value = false;
     isWelcome.value = false;
+    paneMode.value = "both";
+
+    const fileName = path.split(/[/\\]/).pop() || path;
+    toast.success(`Opened ${fileName}`);
+    await updateWindowTitle();
   } catch (err) {
     console.error("Failed to open file:", err);
+    toast.error("Failed to open file");
   }
 }
 
@@ -88,13 +135,31 @@ async function handleOpenFolder() {
     currentFolderPath.value = path;
 
     // Resolve wikilinks to get the ordered list of reachable files
+    let brokenLinks = 0;
     try {
       const ordered = await invoke<string[]>("resolve_wikilinks", { folderPath: path });
       reachableFiles.value = ordered;
     } catch (err) {
       console.error("Wikilink resolution failed:", err);
-      // Fallback: include all .md files
       reachableFiles.value = files.map(([name]) => name);
+    }
+
+    // Check for broken wikilinks by comparing all links in entry file against reachable set
+    const reachableSet = new Set(reachableFiles.value);
+    const entryFile = folderFiles.value.find(
+      (f) => f.name.toLowerCase() === "index.md" || f.name.toLowerCase() === "main.md"
+    ) || folderFiles.value[0];
+    if (entryFile) {
+      const linkMatches = entryFile.content.match(/\[\[([^\]]+)\]\]/g);
+      if (linkMatches) {
+        for (const match of linkMatches) {
+          const target = match.slice(2, -2).trim();
+          const targetFile = target.endsWith(".md") ? target : `${target}.md`;
+          if (!reachableSet.has(targetFile)) {
+            brokenLinks++;
+          }
+        }
+      }
     }
 
     // Build merged editor content from reachable files
@@ -110,18 +175,30 @@ async function handleOpenFolder() {
     }
     editorContent.value = parts.join("");
     isFolderMode.value = true;
-    // usePdf watches editorContent and will call convert_md_to_pdf with the merged content
     isWelcome.value = false;
+    paneMode.value = "both";
+
+    const folderName = path.split(/[/\\]/).pop() || path;
+    toast.success(`Opened folder "${folderName}" with ${reachableFiles.value.length} files`);
+    if (brokenLinks > 0) {
+      toast.warning(`${brokenLinks} broken wikilink${brokenLinks > 1 ? "s" : ""} found`);
+    }
+    await updateWindowTitle();
   } catch (err) {
     console.error("Failed to open folder:", err);
+    toast.error("Failed to open folder");
   }
 }
 
 // ─── Export PDF ───
 async function handleExportPdf() {
-  if (!pdfUrl.value) return;
+  if (!pdfUrl.value) {
+    toast.warning("No PDF to export. Open a file first.");
+    return;
+  }
 
   try {
+    toast.info("Preparing export...", 2000);
     const path = await save({
       filters: [{ name: "PDF", extensions: ["pdf"] }],
       defaultPath: "document.pdf",
@@ -135,8 +212,10 @@ async function handleExportPdf() {
     const uint8Array = new Uint8Array(arrayBuffer);
 
     await writeFile(path, uint8Array);
+    toast.success(`Saved to ${path.split(/[/\\]/).pop() || path}`);
   } catch (err) {
     console.error("Failed to export PDF:", err);
+    toast.error("Failed to export PDF");
   }
 }
 </script>
@@ -168,7 +247,7 @@ async function handleExportPdf() {
       />
 
       <!-- Editor + Preview split view -->
-      <SplitView v-else>
+      <SplitView v-else v-model="paneMode">
         <template #editor>
           <EditorPane
             v-model="editorContent"
@@ -186,6 +265,9 @@ async function handleExportPdf() {
         </template>
       </SplitView>
     </main>
+
+    <!-- Toast notifications -->
+    <ToastContainer />
   </div>
 </template>
 

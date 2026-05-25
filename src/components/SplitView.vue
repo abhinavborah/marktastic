@@ -3,7 +3,19 @@ import { ref, computed } from "vue";
 
 type PaneMode = "both" | "editor" | "preview";
 
-const paneMode = ref<PaneMode>("both");
+const props = defineProps<{
+  modelValue: PaneMode;
+}>();
+
+const emit = defineEmits<{
+  (e: "update:modelValue", mode: PaneMode): void;
+}>();
+
+const paneMode = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val),
+});
+
 const editorWidth = ref(50);
 const isDragging = ref(false);
 
@@ -74,7 +86,7 @@ function togglePane(mode: PaneMode) {
       <button
         class="p-1.5 rounded hover:bg-muted transition-colors"
         :class="{ 'bg-muted': paneMode === 'editor' }"
-        title="Editor only"
+        title="Editor only (⌘/Ctrl+E)"
         @click="togglePane('editor')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -85,7 +97,7 @@ function togglePane(mode: PaneMode) {
       <button
         class="p-1.5 rounded hover:bg-muted transition-colors"
         :class="{ 'bg-muted': paneMode === 'both' }"
-        title="Split view"
+        title="Split view (⌘/Ctrl+B)"
         @click="togglePane('both')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -96,7 +108,7 @@ function togglePane(mode: PaneMode) {
       <button
         class="p-1.5 rounded hover:bg-muted transition-colors"
         :class="{ 'bg-muted': paneMode === 'preview' }"
-        title="Preview only"
+        title="Preview only (⌘/Ctrl+P)"
         @click="togglePane('preview')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

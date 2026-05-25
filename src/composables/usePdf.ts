@@ -1,5 +1,6 @@
 import { ref, watch, type Ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import type { useToast } from "./useToast";
 
 const pdfUrl = ref<string | null>(null);
 const pdfLoading = ref(false);
@@ -15,9 +16,17 @@ function revokeCurrentUrl() {
   }
 }
 
-async function generatePdf(markdown: string, templateName: string) {
+async function generatePdf(
+  markdown: string,
+  templateName: string,
+  toastApi?: ReturnType<typeof useToast>
+) {
   pdfLoading.value = true;
   lastError.value = null;
+
+  if (toastApi) {
+    toastApi.info("Compiling PDF...", 2000);
+  }
 
   try {
     const bytes = await invoke<number[]>("convert_md_to_pdf", {
@@ -31,9 +40,16 @@ async function generatePdf(markdown: string, templateName: string) {
 
     currentBlobUrl = URL.createObjectURL(blob);
     pdfUrl.value = currentBlobUrl;
+
+    if (toastApi) {
+      toastApi.success("PDF ready", 2000);
+    }
   } catch (err) {
     lastError.value = String(err);
     console.error("PDF generation failed:", err);
+    if (toastApi) {
+      toastApi.error(`PDF compilation failed: ${err}`, 5000);
+    }
   } finally {
     pdfLoading.value = false;
   }
@@ -42,6 +58,7 @@ async function generatePdf(markdown: string, templateName: string) {
 export function usePdf(
   markdownRef: Ref<string>,
   templateRef: Ref<string>,
+  toastApi?: ReturnType<typeof useToast>,
   debounceMs = 500
 ) {
   watch(
@@ -51,7 +68,7 @@ export function usePdf(
         clearTimeout(debounceTimer);
       }
       debounceTimer = setTimeout(() => {
-        generatePdf(markdownRef.value, templateRef.value);
+        generatePdf(markdownRef.value, templateRef.value, toastApi);
       }, debounceMs);
     },
     { immediate: true }
