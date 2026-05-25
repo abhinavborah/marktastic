@@ -61,8 +61,25 @@ const hasPages = computed(() => props.pages.length > 0);
       <p class="text-sm">Start typing to see the preview</p>
     </div>
 
-    <!-- Pages: scrollable image viewer -->
-    <div v-else class="flex-1 overflow-auto bg-background">
+    <!-- Pages (always visible during re-render) -->
+    <div v-else class="flex-1 overflow-auto bg-background relative">
+      <!-- Subtle "updating" badge during re-render -->
+      <div
+        v-if="rendering"
+        class="absolute top-2 right-2 z-20 flex items-center gap-2 bg-card/90 backdrop-blur-sm border rounded-full px-3 py-1.5 text-xs text-muted-foreground shadow-sm"
+      >
+        <svg
+          class="w-3 h-3 animate-spin"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+        </svg>
+        <span>Updating zoom...</span>
+      </div>
+
       <div
         v-for="(page, i) in pages"
         :key="i"
@@ -71,23 +88,11 @@ const hasPages = computed(() => props.pages.length > 0);
         <img
           :src="page"
           :alt="`Page ${i + 1}`"
-          class="shadow-lg max-w-full"
+          class="shadow-lg max-w-full transition-opacity duration-300"
+          :class="{ 'opacity-50': rendering }"
           style="background-color: white;"
           loading="lazy"
         />
-      </div>
-
-      <!-- Re-render indicator -->
-      <div v-if="rendering && hasPages" class="flex justify-center p-4">
-        <svg
-          class="w-6 h-6 animate-spin text-primary"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="2"
-        >
-          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-        </svg>
       </div>
     </div>
   </div>
