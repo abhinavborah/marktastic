@@ -23,7 +23,6 @@ const currentFolderPath = ref<string | null>(null);
 const folderFiles = ref<{ name: string; content: string }[]>([]);
 const reachableFiles = ref<string[]>([]);
 const isFolderMode = ref(false);
-const pdfCommand = ref<"convert_md_to_pdf" | "compile_folder_to_pdf">("convert_md_to_pdf");
 
 const hasContent = computed(() => editorContent.value.trim().length > 0);
 
@@ -31,12 +30,9 @@ const hasContent = computed(() => editorContent.value.trim().length > 0);
 const { theme, setTheme } = useTheme();
 
 // ─── PDF ───
-const { pdfUrl, pdfLoading, lastError } = usePdf(
-  editorContent,
-  selectedTemplate,
-  pdfCommand,
-  currentFolderPath
-);
+// Always uses convert_md_to_pdf with the current editorContent as the single source of truth.
+// In folder mode, the merged editor content is passed directly — edits are reflected in the preview.
+const { pdfUrl, pdfLoading, lastError } = usePdf(editorContent, selectedTemplate);
 
 // ─── Scroll Sync ───
 const editorViewRef = ref<any>(null);
@@ -73,7 +69,6 @@ async function handleOpenFile() {
     folderFiles.value = [];
     reachableFiles.value = [];
     isFolderMode.value = false;
-    pdfCommand.value = "convert_md_to_pdf";
     isWelcome.value = false;
   } catch (err) {
     console.error("Failed to open file:", err);
@@ -115,7 +110,7 @@ async function handleOpenFolder() {
     }
     editorContent.value = parts.join("");
     isFolderMode.value = true;
-    pdfCommand.value = "compile_folder_to_pdf";
+    // usePdf watches editorContent and will call convert_md_to_pdf with the merged content
     isWelcome.value = false;
   } catch (err) {
     console.error("Failed to open folder:", err);
