@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, onMounted } from "vue";
 
 const props = defineProps<{
   pdfUrl: string | null;
@@ -7,7 +7,24 @@ const props = defineProps<{
   error: string | null;
 }>();
 
+const emit = defineEmits<{
+  (e: "iframeReady", el: HTMLIFrameElement): void;
+}>();
+
 const hasPdf = computed(() => !!props.pdfUrl);
+const iframeRef = ref<HTMLIFrameElement | null>(null);
+
+onMounted(() => {
+  if (iframeRef.value) {
+    emit("iframeReady", iframeRef.value);
+  }
+});
+
+function onIframeLoad() {
+  if (iframeRef.value) {
+    emit("iframeReady", iframeRef.value);
+  }
+}
 </script>
 
 <template>
@@ -65,9 +82,11 @@ const hasPdf = computed(() => !!props.pdfUrl);
     <!-- PDF iframe -->
     <iframe
       v-else
+      ref="iframeRef"
       :src="pdfUrl ?? undefined"
       class="flex-1 w-full border-0"
       title="PDF Preview"
+      @load="onIframeLoad"
     />
   </div>
 </template>

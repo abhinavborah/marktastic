@@ -30,5 +30,16 @@ defineEmits<{
         Open Folder
       </button>
     </div>
+
+    <div class="max-w-md text-center text-sm text-muted-foreground space-y-2">
+      <p>
+        <strong>Open File</strong> — edit a single Markdown file with live PDF preview.
+      </p>
+      <p>
+        <strong>Open Folder</strong> — open a folder with linked Markdown files.
+        Name your main file <code>index.md</code> or <code>main.md</code>.
+        Use <code>[[filename]]</code> wikilinks to include other files in the PDF.
+      </p>
+    </div>
   </div>
 </template>

@@ -6,6 +6,7 @@ import { writeFile } from "@tauri-apps/plugin-fs";
 
 import { useTheme } from "./composables/useTheme";
 import { usePdf } from "./composables/usePdf";
+import { useScrollSync } from "./composables/useScrollSync";
 import Toolbar from "./components/Toolbar.vue";
 import WelcomeScreen from "./components/WelcomeScreen.vue";
 import SplitView from "./components/SplitView.vue";
@@ -20,6 +21,9 @@ const isWelcome = ref(true);
 const currentFilePath = ref<string | null>(null);
 const currentFolderPath = ref<string | null>(null);
 const folderFiles = ref<{ name: string; content: string }[]>([]);
+const reachableFiles = ref<string[]>([]);
+const isFolderMode = ref(false);
+const pdfCommand = ref<"convert_md_to_pdf" | "compile_folder_to_pdf">("convert_md_to_pdf");
 
 const hasContent = computed(() => editorContent.value.trim().length > 0);
 
@@ -27,7 +31,17 @@ const hasContent = computed(() => editorContent.value.trim().length > 0);
 const { theme, setTheme } = useTheme();
 
 // ─── PDF ───
-const { pdfUrl, pdfLoading, lastError } = usePdf(editorContent, selectedTemplate);
+const { pdfUrl, pdfLoading, lastError } = usePdf(
+  editorContent,
+  selectedTemplate,
+  pdfCommand,
+  currentFolderPath
+);
+
+// ─── Scroll Sync ───
+const editorViewRef = ref<any>(null);
+const previewIframeRef = ref<HTMLIFrameElement | null>(null);
+useScrollSync(editorViewRef, previewIframeRef);
 
 // ─── Load templates on mount ───
 onMounted(async () => {
@@ -57,6 +71,9 @@ async function handleOpenFile() {
     currentFilePath.value = path;
     currentFolderPath.value = null;
     folderFiles.value = [];
+    reachableFiles.value = [];
+    isFolderMode.value = false;
+    pdfCommand.value = "convert_md_to_pdf";
     isWelcome.value = false;
   } catch (err) {
     console.error("Failed to open file:", err);
@@ -70,20 +87,36 @@ async function handleOpenFolder() {
     });
     if (!path || typeof path !== "string") return;
 
+    // Get all files in the folder
     const files = await invoke<[string, string][]>("open_folder", { folderPath: path });
     folderFiles.value = files.map(([name, content]) => ({ name, content }));
     currentFolderPath.value = path;
 
-    // Load the first .md file (or one named index.md / main.md if present)
-    const entry =
-      folderFiles.value.find(
-        (f) => f.name.toLowerCase() === "index.md" || f.name.toLowerCase() === "main.md"
-      ) || folderFiles.value[0];
-
-    if (entry) {
-      editorContent.value = entry.content;
-      isWelcome.value = false;
+    // Resolve wikilinks to get the ordered list of reachable files
+    try {
+      const ordered = await invoke<string[]>("resolve_wikilinks", { folderPath: path });
+      reachableFiles.value = ordered;
+    } catch (err) {
+      console.error("Wikilink resolution failed:", err);
+      // Fallback: include all .md files
+      reachableFiles.value = files.map(([name]) => name);
     }
+
+    // Build merged editor content from reachable files
+    const fileMap = new Map(folderFiles.value.map((f) => [f.name, f.content]));
+    const parts: string[] = [];
+    for (let i = 0; i < reachableFiles.value.length; i++) {
+      const name = reachableFiles.value[i];
+      const content = fileMap.get(name) || "";
+      if (i > 0) {
+        parts.push("\n\n---\n\n");
+      }
+      parts.push(`<!-- file: ${name} -->\n\n${content}`);
+    }
+    editorContent.value = parts.join("");
+    isFolderMode.value = true;
+    pdfCommand.value = "compile_folder_to_pdf";
+    isWelcome.value = false;
   } catch (err) {
     console.error("Failed to open folder:", err);
   }
@@ -121,6 +154,8 @@ async function handleExportPdf() {
       :templates="templates"
       :selected-template="selectedTemplate"
       :has-content="hasContent"
+      :folder-path="currentFolderPath"
+      :reachable-files="reachableFiles"
       @update:theme="setTheme"
       @update:selected-template="selectedTemplate = $event"
       @open-file="handleOpenFile"
@@ -140,10 +175,19 @@ async function handleExportPdf() {
       <!-- Editor + Preview split view -->
       <SplitView v-else>
         <template #editor>
-          <EditorPane v-model="editorContent" :theme="theme" />
+          <EditorPane
+            v-model="editorContent"
+            :theme="theme"
+            @editor-ready="(v: any) => editorViewRef = v"
+          />
         </template>
         <template #preview>
-          <PreviewPane :pdf-url="pdfUrl" :loading="pdfLoading" :error="lastError" />
+          <PreviewPane
+            :pdf-url="pdfUrl"
+            :loading="pdfLoading"
+            :error="lastError"
+            @iframe-ready="(el: HTMLIFrameElement) => previewIframeRef = el"
+          />
         </template>
       </SplitView>
     </main>

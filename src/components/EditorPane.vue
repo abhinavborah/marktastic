@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "update:modelValue", value: string): void;
+  (e: "editorReady", view: EditorView): void;
 }>();
 
 const editorContainer = ref<HTMLDivElement | null>(null);
@@ -89,6 +90,7 @@ function createView(content: string, theme: ThemeMode) {
       state,
       parent: editorContainer.value,
     });
+    emit("editorReady", view.value);
   }
 }
 

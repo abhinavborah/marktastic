@@ -1,6 +1,47 @@
 use pulldown_cmark::{Event, Parser, Tag, TagEnd, CodeBlockKind, Alignment};
 
+/// Pre-process wikilinks `[[filename]]` before pulldown-cmark parsing.
+/// For single-file mode (no folder context), all wikilinks are treated as broken.
+/// For merged documents, wikilinks are already resolved by the merger.
+fn preprocess_wikilinks(markdown: &str) -> String {
+    // Simple regex-like replacement for [[filename]] syntax
+    let mut result = String::with_capacity(markdown.len());
+    let mut chars = markdown.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '[' && chars.peek() == Some(&'[') {
+            chars.next(); // consume second '['
+            let mut link_text = String::new();
+            let mut found_end = false;
+            while let Some(inner) = chars.next() {
+                if inner == ']' && chars.peek() == Some(&']') {
+                    chars.next(); // consume second ']'
+                    found_end = true;
+                    break;
+                }
+                link_text.push(inner);
+            }
+            if found_end {
+                let trimmed = link_text.trim();
+                // Broken link placeholder (markdown emphasis)
+                result.push_str(&format!("*Missing link: {}*", trimmed));
+            } else {
+                // Unclosed wikilink, keep as-is
+                result.push('[');
+                result.push('[');
+                result.push_str(&link_text);
+            }
+        } else {
+            result.push(ch);
+        }
+    }
+
+    result
+}
+
 pub fn convert_md_to_typst(markdown: &str) -> String {
+    let preprocessed = preprocess_wikilinks(markdown);
+
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_TABLES);
     options.insert(pulldown_cmark::Options::ENABLE_FOOTNOTES);
@@ -9,7 +50,7 @@ pub fn convert_md_to_typst(markdown: &str) -> String {
     options.insert(pulldown_cmark::Options::ENABLE_SMART_PUNCTUATION);
     options.insert(pulldown_cmark::Options::ENABLE_HEADING_ATTRIBUTES);
 
-    let parser = Parser::new_ext(markdown, options);
+    let parser = Parser::new_ext(&preprocessed, options);
     let mut output = String::new();
     let mut in_code_block = false;
     let mut code_lang = String::new();

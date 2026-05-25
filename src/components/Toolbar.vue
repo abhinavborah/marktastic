@@ -7,6 +7,8 @@ const props = defineProps<{
   templates: string[];
   selectedTemplate: string;
   hasContent: boolean;
+  folderPath?: string | null;
+  reachableFiles?: string[];
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +36,12 @@ function cycleTheme() {
   const next = modes[(idx + 1) % modes.length];
   emit("update:theme", next);
 }
+
+const folderName = computed(() => {
+  if (!props.folderPath) return null;
+  const parts = props.folderPath.split(/[/\\]/);
+  return parts[parts.length - 1] || parts[parts.length - 2] || props.folderPath;
+});
 </script>
 
 <template>
@@ -58,6 +66,15 @@ function cycleTheme() {
         <line x1="10" y1="9" x2="8" y2="9" />
       </svg>
       <span class="font-bold text-lg tracking-tight">Marktastic</span>
+    </div>
+
+    <!-- Folder indicator -->
+    <div v-if="folderName" class="flex items-center gap-1.5 px-2 py-1 text-xs rounded bg-muted text-muted-foreground">
+      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span class="font-medium">{{ folderName }}</span>
+      <span v-if="reachableFiles && reachableFiles.length > 0" class="opacity-70">
+        ({{ reachableFiles.length }} files)
+      </span>
     </div>
 
     <div class="flex-1" />

@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 mod md_to_typst;
 mod typst_world;
+mod wikilinks;
 
 use typst_world::TypstWrapperWorld;
 use typst_pdf::PdfOptions;
@@ -9,10 +10,30 @@ use typst_pdf::PdfOptions;
 const TEMPLATE_DIR: &str = "templates";
 const MARKER: &str = "// MARKTASTIC_BODY_CONTENT";
 
+/// Compile markdown to PDF using a built-in template.
 #[tauri::command]
 fn convert_md_to_pdf(markdown: String, template_name: String) -> Result<Vec<u8>, String> {
+    compile_markdown_to_pdf(&markdown, &template_name)
+}
+
+/// Compile a folder of linked markdown files to PDF.
+/// Resolves wikilinks, merges reachable files, and compiles to PDF.
+#[tauri::command]
+fn compile_folder_to_pdf(folder_path: String, template_name: String) -> Result<Vec<u8>, String> {
+    let (merged_markdown, _boundaries) = wikilinks::build_merged_document(&folder_path)?;
+    compile_markdown_to_pdf(&merged_markdown, &template_name)
+}
+
+/// Resolve wikilinks in a folder and return the ordered list of reachable file names.
+#[tauri::command]
+fn resolve_wikilinks(folder_path: String) -> Result<Vec<String>, String> {
+    wikilinks::resolve_wikilinks(&folder_path)
+}
+
+/// Shared PDF compilation logic.
+fn compile_markdown_to_pdf(markdown: &str, template_name: &str) -> Result<Vec<u8>, String> {
     // Convert markdown to Typst markup
-    let typst_body = md_to_typst::convert_md_to_typst(&markdown);
+    let typst_body = md_to_typst::convert_md_to_typst(markdown);
 
     // Resolve template path
     let exe_dir = std::env::current_exe()
@@ -20,7 +41,7 @@ fn convert_md_to_pdf(markdown: String, template_name: String) -> Result<Vec<u8>,
         .parent()
         .ok_or("Failed to get executable directory")?
         .to_path_buf();
-    
+
     // Try multiple locations for the template (dev vs release builds)
     let template_path_candidates = [
         exe_dir.join(TEMPLATE_DIR).join(format!("{}.typ", template_name)),
@@ -161,6 +182,8 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             convert_md_to_pdf,
+            compile_folder_to_pdf,
+            resolve_wikilinks,
             open_file_path,
             open_folder,
             get_templates,

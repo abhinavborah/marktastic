@@ -15,15 +15,29 @@ function revokeCurrentUrl() {
   }
 }
 
-async function generatePdf(markdown: string, templateName: string) {
+async function generatePdf(
+  markdown: string,
+  templateName: string,
+  command: string,
+  folderPath: string | null
+) {
   pdfLoading.value = true;
   lastError.value = null;
 
   try {
-    const bytes = await invoke<number[]>("convert_md_to_pdf", {
-      markdown,
-      templateName,
-    });
+    let bytes: number[];
+
+    if (command === "compile_folder_to_pdf" && folderPath) {
+      bytes = await invoke<number[]>("compile_folder_to_pdf", {
+        folderPath,
+        templateName,
+      });
+    } else {
+      bytes = await invoke<number[]>("convert_md_to_pdf", {
+        markdown,
+        templateName,
+      });
+    }
 
     const uint8Array = new Uint8Array(bytes);
     const blob = new Blob([uint8Array], { type: "application/pdf" });
@@ -42,16 +56,23 @@ async function generatePdf(markdown: string, templateName: string) {
 export function usePdf(
   markdownRef: Ref<string>,
   templateRef: Ref<string>,
+  commandRef: Ref<string>,
+  folderPathRef: Ref<string | null>,
   debounceMs = 500
 ) {
   watch(
-    [markdownRef, templateRef],
+    [markdownRef, templateRef, commandRef, folderPathRef],
     () => {
       if (debounceTimer) {
         clearTimeout(debounceTimer);
       }
       debounceTimer = setTimeout(() => {
-        generatePdf(markdownRef.value, templateRef.value);
+        generatePdf(
+          markdownRef.value,
+          templateRef.value,
+          commandRef.value,
+          folderPathRef.value
+        );
       }, debounceMs);
     },
     { immediate: true }
