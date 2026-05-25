@@ -25,4 +25,14 @@ tauri-plugin-fs = "2"
 tauri-plugin-shell = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+pulldown-cmark = "0.13.4"
+typst = "0.14.2"
+typst-pdf = "0.14.2"
+ureq = "2"
+zune-inflate = { version = "0.2.54", default-features = false, features = ["gzip", "std"] }
+comemo = "0.5.1"
+time = "0.3.47"
+ttf-parser = "0.25.1"
+tar = "0.4.46"
+typst-kit = { version = "0.14.2", features = ["embed-fonts"] }
 
