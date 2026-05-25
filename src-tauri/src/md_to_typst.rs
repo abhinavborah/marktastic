@@ -187,6 +187,9 @@ pub fn convert_md_to_typst(markdown: &str) -> String {
                     }
                     TagEnd::Item => {
                         output.push_str("\n");
+                        // Reset task list state so it doesn't leak into next item
+                        in_task_list = false;
+                        task_checked = false;
                     }
                     TagEnd::Emphasis => output.push_str("_"),
                     TagEnd::Strong => output.push_str("*"),
@@ -194,14 +197,15 @@ pub fn convert_md_to_typst(markdown: &str) -> String {
                     TagEnd::Link => {
                         in_link = false;
                         let text = link_text.trim();
+                        let escaped_text = escape_text(text);
                         if link_url.starts_with("#") {
                             // internal anchor
-                            output.push_str(&format!("#link(\"{}\")[{}]", escape_string(&link_url), text));
+                            output.push_str(&format!("#link(\"{}\")[{}]", escape_string(&link_url), escaped_text));
                         } else {
                             output.push_str(&format!(
                                 "#link(\"{}\")[{}]",
                                 escape_string(&link_url),
-                                text
+                                escaped_text
                             ));
                         }
                     }
@@ -234,13 +238,13 @@ pub fn convert_md_to_typst(markdown: &str) -> String {
                         // header row
                         output.push_str("  table.header(\n");
                         for cell in &table_header {
-                            output.push_str(&format!("    [{}],\n", cell.trim()));
+                            output.push_str(&format!("    [{}],\n", escape_text(cell.trim())));
                         }
                         output.push_str("  ),\n");
                         // data rows
                         for row in &table_rows {
                             for cell in row {
-                                output.push_str(&format!("  [{}],\n", cell.trim()));
+                                output.push_str(&format!("  [{}],\n", escape_text(cell.trim())));
                             }
                         }
                         output.push_str(")\n\n");
@@ -275,7 +279,12 @@ pub fn convert_md_to_typst(markdown: &str) -> String {
                 }
             }
             Event::Code(code) => {
-                output.push_str(&format!("`{}`", escape_string(&code)));
+                let code_str = &code;
+                if code_str.contains('`') {
+                    output.push_str(&typst_raw_string(code_str));
+                } else {
+                    output.push_str(&format!("`{}`", code_str));
+                }
             }
             Event::Html(html) => {
                 // ignore raw HTML for now
@@ -313,6 +322,8 @@ fn escape_string(s: &str) -> String {
         .replace("\n", "\\n")
         .replace("\r", "\\r")
         .replace("\t", "\\t")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
 }
 
 fn escape_text(s: &str) -> String {
@@ -324,8 +335,29 @@ fn escape_text(s: &str) -> String {
         .replace("`", "\\`")
         .replace("[", "\\[")
         .replace("]", "\\]")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
         .replace("@", "\\@")
         .replace("<", "\\<")
         .replace(">", "\\>")
         .replace("$", "\\$")
+}
+
+/// Generate a Typst raw string with the correct number of backtick delimiters.
+/// Ensures the content doesn't contain the delimiter sequence.
+fn typst_raw_string(content: &str) -> String {
+    let mut max_consecutive = 0;
+    let mut current = 0;
+    for ch in content.chars() {
+        if ch == '`' {
+            current += 1;
+            max_consecutive = max_consecutive.max(current);
+        } else {
+            current = 0;
+        }
+    }
+    let fence_len = max_consecutive + 1;
+    let fence = "`".repeat(fence_len);
+    // Leading/trailing spaces ensure the content doesn't abut the fence
+    format!("{} {} {}", fence, content, fence)
 }
