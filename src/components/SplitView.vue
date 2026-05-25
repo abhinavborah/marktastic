@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onBeforeUnmount } from "vue";
 
 type PaneMode = "both" | "editor" | "preview";
 
@@ -25,28 +25,49 @@ const showEditor = computed(() => paneMode.value !== "preview");
 const showPreview = computed(() => paneMode.value !== "editor");
 const isBoth = computed(() => paneMode.value === "both");
 
+let dragCleanup: (() => void) | null = null;
+
 function startDrag(e: MouseEvent) {
   if (!isBoth.value) return;
   isDragging.value = true;
-  document.addEventListener("mousemove", onDrag);
-  document.addEventListener("mouseup", stopDrag);
+
+  // Prevent text selection during drag
+  document.body.style.userSelect = "none";
+  document.body.style.cursor = "col-resize";
+
+  const handleMouseMove = (ev: MouseEvent) => {
+    if (!isDragging.value) return;
+    const container = document.getElementById("split-container");
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const pct = ((ev.clientX - rect.left) / rect.width) * 100;
+    editorWidth.value = Math.max(20, Math.min(80, pct));
+  };
+
+  const handleMouseUp = () => {
+    isDragging.value = false;
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+    window.removeEventListener("mousemove", handleMouseMove);
+    window.removeEventListener("mouseup", handleMouseUp);
+    window.removeEventListener("blur", handleMouseUp);
+    dragCleanup = null;
+  };
+
+  // Use window listeners so they fire even when mouse leaves the document
+  // (e.g. over an iframe or outside the window)
+  window.addEventListener("mousemove", handleMouseMove);
+  window.addEventListener("mouseup", handleMouseUp);
+  // Handle window losing focus (e.g. Alt+Tab during drag)
+  window.addEventListener("blur", handleMouseUp);
+
+  dragCleanup = handleMouseUp;
   e.preventDefault();
 }
 
-function onDrag(e: MouseEvent) {
-  if (!isDragging.value) return;
-  const container = document.getElementById("split-container");
-  if (!container) return;
-  const rect = container.getBoundingClientRect();
-  const pct = ((e.clientX - rect.left) / rect.width) * 100;
-  editorWidth.value = Math.max(20, Math.min(80, pct));
-}
-
-function stopDrag() {
-  isDragging.value = false;
-  document.removeEventListener("mousemove", onDrag);
-  document.removeEventListener("mouseup", stopDrag);
-}
+onBeforeUnmount(() => {
+  if (dragCleanup) dragCleanup();
+});
 
 function togglePane(mode: PaneMode) {
   paneMode.value = mode;
@@ -54,7 +75,7 @@ function togglePane(mode: PaneMode) {
 </script>
 
 <template>
-  <div id="split-container" class="flex h-full relative">
+  <div id="split-container" class="flex h-full relative" :data-dragging="isDragging">
     <!-- Editor pane -->
     <div
       v-if="showEditor"

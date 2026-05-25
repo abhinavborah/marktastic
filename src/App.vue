@@ -196,6 +196,7 @@ async function handleOpenFolder() {
 
 // ─── Export PDF ───
 async function handleExportPdf() {
+  console.log("Export: checking pdfBytes...", pdfBytes.value?.length);
   if (!pdfBytes.value || pdfBytes.value.length === 0) {
     toast.warning("No PDF to export. Open a file first.");
     return;
@@ -203,17 +204,41 @@ async function handleExportPdf() {
 
   try {
     toast.info("Preparing export...", 2000);
+    console.log("Export: opening save dialog...");
     const path = await save({
       filters: [{ name: "PDF", extensions: ["pdf"] }],
       defaultPath: "document.pdf",
     });
-    if (!path || typeof path !== "string") return;
+    console.log("Export: save dialog returned:", path);
+    if (!path || typeof path !== "string") {
+      console.log("Export: no path selected, cancelling");
+      return;
+    }
 
-    await writeFile(path, pdfBytes.value);
+    // Try direct write first
+    try {
+      console.log("Export: writing file to", path, "bytes:", pdfBytes.value.length);
+      await writeFile(path, pdfBytes.value);
+      console.log("Export: file written successfully");
+    } catch (directErr: any) {
+      console.warn("Export: direct write failed, trying blob fetch fallback:", directErr);
+      // Fallback: fetch the blob URL and write that
+      if (pdfUrl.value) {
+        const response = await fetch(pdfUrl.value);
+        const blob = await response.blob();
+        const arrayBuffer = await blob.arrayBuffer();
+        const uint8Array = new Uint8Array(arrayBuffer);
+        await writeFile(path, uint8Array);
+        console.log("Export: fallback write succeeded");
+      } else {
+        throw directErr;
+      }
+    }
     toast.success(`Saved to ${path.split(/[/\\]/).pop() || path}`);
-  } catch (err) {
-    console.error("Failed to export PDF:", err);
-    toast.error("Failed to export PDF");
+  } catch (err: any) {
+    console.error("Export: FAILED with error:", err);
+    console.error("Export: error message:", err?.message || String(err));
+    toast.error(`Export failed: ${err?.message || String(err)}`);
   }
 }
 </script>
