@@ -314,6 +314,7 @@ async function handleExportPdf() {
             :pages="pages"
             :rendering="previewLoading"
             :error="previewError"
+            :zoom="zoomLevel"
           />
         </template>
       </SplitView>

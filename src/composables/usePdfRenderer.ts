@@ -41,7 +41,7 @@ export function usePdfRenderer(
         } finally {
           rendering.value = false;
         }
-      }, 400);
+      }, 200);
     },
     { immediate: false }
   );
