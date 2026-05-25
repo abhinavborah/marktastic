@@ -1,160 +1,166 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { writeFile } from "@tauri-apps/plugin-fs";
 
-const greetMsg = ref("");
-const name = ref("");
+import { useTheme } from "./composables/useTheme";
+import { usePdf } from "./composables/usePdf";
+import Toolbar from "./components/Toolbar.vue";
+import WelcomeScreen from "./components/WelcomeScreen.vue";
+import SplitView from "./components/SplitView.vue";
+import EditorPane from "./components/EditorPane.vue";
+import PreviewPane from "./components/PreviewPane.vue";
 
-async function greet() {
-  // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-  greetMsg.value = await invoke("greet", { name: name.value });
+// ─── State ───
+const editorContent = ref("");
+const selectedTemplate = ref("basic-report");
+const templates = ref<string[]>([]);
+const isWelcome = ref(true);
+const currentFilePath = ref<string | null>(null);
+const currentFolderPath = ref<string | null>(null);
+const folderFiles = ref<{ name: string; content: string }[]>([]);
+
+const hasContent = computed(() => editorContent.value.trim().length > 0);
+
+// ─── Theme ───
+const { theme, setTheme } = useTheme();
+
+// ─── PDF ───
+const { pdfUrl, pdfLoading, lastError } = usePdf(editorContent, selectedTemplate);
+
+// ─── Load templates on mount ───
+onMounted(async () => {
+  try {
+    const list = await invoke<string[]>("get_templates");
+    templates.value = list;
+    if (list.length > 0 && !list.includes(selectedTemplate.value)) {
+      selectedTemplate.value = list[0];
+    }
+  } catch (err) {
+    console.error("Failed to load templates:", err);
+    templates.value = ["basic-report", "university-assignment", "thesis-chapter"];
+  }
+});
+
+// ─── File / Folder open ───
+async function handleOpenFile() {
+  try {
+    const path = await open({
+      multiple: false,
+      filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
+    });
+    if (!path || typeof path !== "string") return;
+
+    const content = await invoke<string>("open_file_path", { filePath: path });
+    editorContent.value = content;
+    currentFilePath.value = path;
+    currentFolderPath.value = null;
+    folderFiles.value = [];
+    isWelcome.value = false;
+  } catch (err) {
+    console.error("Failed to open file:", err);
+  }
+}
+
+async function handleOpenFolder() {
+  try {
+    const path = await open({
+      directory: true,
+    });
+    if (!path || typeof path !== "string") return;
+
+    const files = await invoke<[string, string][]>("open_folder", { folderPath: path });
+    folderFiles.value = files.map(([name, content]) => ({ name, content }));
+    currentFolderPath.value = path;
+
+    // Load the first .md file (or one named index.md / main.md if present)
+    const entry =
+      folderFiles.value.find(
+        (f) => f.name.toLowerCase() === "index.md" || f.name.toLowerCase() === "main.md"
+      ) || folderFiles.value[0];
+
+    if (entry) {
+      editorContent.value = entry.content;
+      isWelcome.value = false;
+    }
+  } catch (err) {
+    console.error("Failed to open folder:", err);
+  }
+}
+
+// ─── Export PDF ───
+async function handleExportPdf() {
+  if (!pdfUrl.value) return;
+
+  try {
+    const path = await save({
+      filters: [{ name: "PDF", extensions: ["pdf"] }],
+      defaultPath: "document.pdf",
+    });
+    if (!path || typeof path !== "string") return;
+
+    // Fetch the blob and convert to Uint8Array
+    const response = await fetch(pdfUrl.value);
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+
+    await writeFile(path, uint8Array);
+  } catch (err) {
+    console.error("Failed to export PDF:", err);
+  }
 }
 </script>
 
 <template>
-  <main class="container">
-    <h1>Welcome to Tauri + Vue</h1>
+  <div class="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+    <!-- Toolbar -->
+    <Toolbar
+      :theme="theme"
+      :templates="templates"
+      :selected-template="selectedTemplate"
+      :has-content="hasContent"
+      @update:theme="setTheme"
+      @update:selected-template="selectedTemplate = $event"
+      @open-file="handleOpenFile"
+      @open-folder="handleOpenFolder"
+      @export-pdf="handleExportPdf"
+    />
 
-    <div class="row">
-      <a href="https://vite.dev" target="_blank">
-        <img src="/vite.svg" class="logo vite" alt="Vite logo" />
-      </a>
-      <a href="https://tauri.app" target="_blank">
-        <img src="/tauri.svg" class="logo tauri" alt="Tauri logo" />
-      </a>
-      <a href="https://vuejs.org/" target="_blank">
-        <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-      </a>
-    </div>
-    <p>Click on the Tauri, Vite, and Vue logos to learn more.</p>
+    <!-- Main area -->
+    <main class="flex-1 overflow-hidden">
+      <!-- Welcome screen -->
+      <WelcomeScreen
+        v-if="isWelcome"
+        @open-file="handleOpenFile"
+        @open-folder="handleOpenFolder"
+      />
 
-    <form class="row" @submit.prevent="greet">
-      <input id="greet-input" v-model="name" placeholder="Enter a name..." />
-      <button type="submit">Greet</button>
-    </form>
-    <p>{{ greetMsg }}</p>
-  </main>
+      <!-- Editor + Preview split view -->
+      <SplitView v-else>
+        <template #editor>
+          <EditorPane v-model="editorContent" :theme="theme" />
+        </template>
+        <template #preview>
+          <PreviewPane :pdf-url="pdfUrl" :loading="pdfLoading" :error="lastError" />
+        </template>
+      </SplitView>
+    </main>
+  </div>
 </template>
 
-<style scoped>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #249b73);
-}
-
-</style>
 <style>
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+/* Ensure full height */
+html,
+body,
+#app {
+  height: 100%;
+  overflow: hidden;
 }
 
-.container {
+/* Remove default Tauri starter styles */
+body {
   margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
 }
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
-  }
-
-  a:hover {
-    color: #24c8db;
-  }
-
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
-  }
-  button:active {
-    background-color: #0f0f0f69;
-  }
-}
-
 </style>
