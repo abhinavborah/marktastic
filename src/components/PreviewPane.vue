@@ -138,19 +138,18 @@ if (props.pdfUrl) {
       </div>
 
       <!-- Scrollable container for zoomed content -->
-      <div class="flex-1 overflow-auto flex justify-center">
+      <div class="flex-1 overflow-auto relative">
         <div
           :style="{
             transform: `scale(${props.zoom ?? 1})`,
-            transformOrigin: 'top center',
+            transformOrigin: 'top left',
             width: '100%',
-            minWidth: '100%',
           }"
         >
           <iframe
             ref="iframeRef"
-            :src="pdfUrl ?? undefined"
-            class="w-full border-0"
+            :src="pdfUrl ? `${pdfUrl}#toolbar=0` : undefined"
+            class="w-full border-0 block"
             style="min-height: 100vh;"
             title="PDF Preview"
             @load="onIframeLoad"
