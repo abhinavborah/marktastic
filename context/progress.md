@@ -504,3 +504,40 @@ Replaced the iframe-based PDF preview with a Rust PDFium renderer that converts 
 ### Compilation after fix
 - `npm run build` ✅
 - `cargo check` ✅
+
+## Fixed 2.0× Pre-render + CSS Display Scaling — 2026-05-26
+
+### Issue: Zoom still triggered Rust re-render even with CSS scale debounce
+**Root cause:** The previous approach rendered at the user's target zoom level, then used CSS scale as a temporary visual band-aid until the real re-render arrived. Zoom clicks still triggered `invoke('render_pdf_pages')` after a 200ms debounce. Multi-page PDFs took 500ms+ to re-render.  
+**Fix:**
+1. **Always render at fixed 2.0× zoom in `usePdfRenderer.ts`:**
+   - Removed `zoomRef` parameter entirely
+   - Removed debounce timer (no longer needed — only `pdfBytes` is watched)
+   - Always passes `zoom: 2.0` to Rust `render_pdf_pages` command
+   - Only re-renders when `pdfBytes` changes (markdown edit or template change)
+
+2. **Simplified `PreviewPane.vue` to pure CSS display scaling:**
+   - `displayScale = zoom / 2.0` — fixed formula since render zoom is always 2.0
+   - `transform: scale(displayScale)` with `transformOrigin: 'top center'`
+   - `width: ${100 / displayScale}%` — compensates layout width so the container matches visual size
+   - Removed `renderedZoom` tracking, `cssScale` computed, `isScaling` logic, and transition animation
+   - Removed the "Updating..." re-render badge (no re-render on zoom)
+
+3. **Updated `App.vue`:**
+   - `usePdfRenderer(pdfBytes)` — removed `zoomLevel` argument
+   - PreviewPane `:zoom="zoomLevel"` binding unchanged
+
+### Behavior
+- Open file → one initial render at 2.0× (slower than before, but only once)
+- Click zoom in/out → **instant CSS scaling, zero Rust calls, zero delay**
+- Edit markdown → `usePdf` debounces 500ms → new `pdfBytes` → one re-render at 2.0×
+- Zoom range 0.5–2.0× all produce crisp images (source is 2.0×, downscaled or displayed native)
+
+### Files changed
+- `src/composables/usePdfRenderer.ts`
+- `src/components/PreviewPane.vue`
+- `src/App.vue`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅

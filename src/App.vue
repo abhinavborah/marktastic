@@ -52,8 +52,7 @@ const { pdfBytes, pdfLoading, lastError } = usePdf(
 
 // ─── PDF Image Renderer ───
 const { pages, rendering: imageRendering, renderError } = usePdfRenderer(
-  pdfBytes,
-  zoomLevel
+  pdfBytes
 );
 
 const previewLoading = computed(() => pdfLoading.value || imageRendering.value);
