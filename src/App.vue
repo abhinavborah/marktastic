@@ -215,25 +215,9 @@ async function handleExportPdf() {
       return;
     }
 
-    // Try direct write first
-    try {
-      console.log("Export: writing file to", path, "bytes:", pdfBytes.value.length);
-      await writeFile(path, pdfBytes.value);
-      console.log("Export: file written successfully");
-    } catch (directErr: any) {
-      console.warn("Export: direct write failed, trying blob fetch fallback:", directErr);
-      // Fallback: fetch the blob URL and write that
-      if (pdfUrl.value) {
-        const response = await fetch(pdfUrl.value);
-        const blob = await response.blob();
-        const arrayBuffer = await blob.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
-        await writeFile(path, uint8Array);
-        console.log("Export: fallback write succeeded");
-      } else {
-        throw directErr;
-      }
-    }
+    console.log("Export: writing file to", path, "bytes:", pdfBytes.value.length);
+    await writeFile(path, pdfBytes.value);
+    console.log("Export: file written successfully");
     toast.success(`Saved to ${path.split(/[/\\]/).pop() || path}`);
   } catch (err: any) {
     console.error("Export: FAILED with error:", err);
