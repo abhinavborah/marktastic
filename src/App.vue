@@ -197,6 +197,19 @@ async function handleOpenFolder() {
   }
 }
 
+// ─── Zoom ───
+function handleZoomIn() {
+  console.log("Zoom in clicked, current:", zoomLevel.value);
+  zoomLevel.value = Math.min(3, zoomLevel.value * 1.1);
+  console.log("Zoom in new value:", zoomLevel.value);
+}
+
+function handleZoomOut() {
+  console.log("Zoom out clicked, current:", zoomLevel.value);
+  zoomLevel.value = Math.max(0.5, zoomLevel.value / 1.1);
+  console.log("Zoom out new value:", zoomLevel.value);
+}
+
 // ─── Open in Preview ───
 async function openInPreview() {
   if (!pdfBytes.value || pdfBytes.value.length === 0) {
@@ -281,8 +294,8 @@ async function handleExportPdf() {
         :word-wrap="wordWrap"
         :zoom="zoomLevel"
         @toggle-word-wrap="wordWrap = !wordWrap"
-        @zoom-in="zoomLevel = Math.min(3, zoomLevel * 1.1)"
-        @zoom-out="zoomLevel = Math.max(0.5, zoomLevel / 1.1)"
+        @zoom-in="handleZoomIn"
+        @zoom-out="handleZoomOut"
         @open-in-preview="openInPreview"
       >
         <template #editor>

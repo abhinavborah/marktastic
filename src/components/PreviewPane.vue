@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, watch } from "vue";
+import { computed, ref, onMounted, watch, onBeforeUnmount } from "vue";
 
 const props = defineProps<{
   pdfUrl: string | null;
@@ -15,6 +15,32 @@ const emit = defineEmits<{
 const hasPdf = computed(() => !!props.pdfUrl);
 const iframeRef = ref<HTMLIFrameElement | null>(null);
 const iframeLoaded = ref(false);
+const loadTimedOut = ref(false);
+let loadTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearLoadTimer() {
+  if (loadTimer) {
+    clearTimeout(loadTimer);
+    loadTimer = null;
+  }
+}
+
+function startLoadTimer() {
+  clearLoadTimer();
+  loadTimedOut.value = false;
+  loadTimer = setTimeout(() => {
+    loadTimedOut.value = true;
+    console.warn("PreviewPane: iframe load timed out, hiding overlay");
+  }, 3000);
+}
+
+function onIframeLoad() {
+  clearLoadTimer();
+  iframeLoaded.value = true;
+  if (iframeRef.value) {
+    emit("iframeReady", iframeRef.value);
+  }
+}
 
 onMounted(() => {
   if (iframeRef.value) {
@@ -22,17 +48,21 @@ onMounted(() => {
   }
 });
 
-function onIframeLoad() {
-  iframeLoaded.value = true;
-  if (iframeRef.value) {
-    emit("iframeReady", iframeRef.value);
-  }
-}
+onBeforeUnmount(() => {
+  clearLoadTimer();
+});
 
 // Reset loaded state when pdfUrl changes
 watch(() => props.pdfUrl, () => {
   iframeLoaded.value = false;
+  loadTimedOut.value = false;
+  startLoadTimer();
 });
+
+// Start timer on initial mount if we have a pdfUrl
+if (props.pdfUrl) {
+  startLoadTimer();
+}
 </script>
 
 <template>
@@ -86,12 +116,12 @@ watch(() => props.pdfUrl, () => {
       <p class="text-sm">Start typing to see the preview</p>
     </div>
 
-    <!-- PDF iframe with dark overlay to prevent white flash -->
+    <!-- PDF iframe with zoom wrapper -->
     <template v-else>
-      <!-- Dark overlay shown while iframe is loading its content -->
+      <!-- Loading overlay: theme-aware background + 3s timeout fallback -->
       <div
-        v-if="!iframeLoaded"
-        class="absolute inset-0 z-10 bg-black flex items-center justify-center"
+        v-if="!iframeLoaded && !loadTimedOut"
+        class="absolute inset-0 z-10 bg-background flex items-center justify-center"
       >
         <div class="flex flex-col items-center gap-2 text-muted-foreground">
           <svg
@@ -106,18 +136,27 @@ watch(() => props.pdfUrl, () => {
           <span class="text-sm">Loading PDF...</span>
         </div>
       </div>
-      <iframe
-        ref="iframeRef"
-        :src="pdfUrl ?? undefined"
-        class="flex-1 w-full border-0"
-        :style="{
-          zoom: props.zoom ?? 1,
-          height: `${100 / (props.zoom ?? 1)}%`,
-          minHeight: '100%',
-        }"
-        title="PDF Preview"
-        @load="onIframeLoad"
-      />
+
+      <!-- Scrollable container for zoomed content -->
+      <div class="flex-1 overflow-auto flex justify-center">
+        <div
+          :style="{
+            transform: `scale(${props.zoom ?? 1})`,
+            transformOrigin: 'top center',
+            width: '100%',
+            minWidth: '100%',
+          }"
+        >
+          <iframe
+            ref="iframeRef"
+            :src="pdfUrl ?? undefined"
+            class="w-full border-0"
+            style="min-height: 100vh;"
+            title="PDF Preview"
+            @load="onIframeLoad"
+          />
+        </div>
+      </div>
     </template>
   </div>
 </template>
