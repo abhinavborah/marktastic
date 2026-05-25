@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { open as openInShell } from "@tauri-apps/plugin-shell";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
@@ -31,6 +32,7 @@ const reachableFiles = ref<string[]>([]);
 const isFolderMode = ref(false);
 const paneMode = ref<PaneMode>("both");
 const wordWrap = ref(false);
+const zoomLevel = ref(1.0);
 
 const hasContent = computed(() => editorContent.value.trim().length > 0);
 
@@ -194,6 +196,24 @@ async function handleOpenFolder() {
   }
 }
 
+// ─── Reveal in Finder ───
+async function revealInFinder() {
+  const path = currentFilePath.value || currentFolderPath.value;
+  if (!path) {
+    toast.warning("No file or folder open");
+    return;
+  }
+  // Extract folder path: remove filename if it's a file
+  const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  const folder = lastSlash >= 0 ? path.substring(0, lastSlash + 1) : path;
+  try {
+    await openInShell(folder);
+  } catch (err) {
+    console.error("Failed to reveal in finder:", err);
+    toast.error("Failed to open folder");
+  }
+}
+
 // ─── Export PDF ───
 async function handleExportPdf() {
   console.log("Export: checking pdfBytes...", pdfBytes.value?.length);
@@ -254,7 +274,16 @@ async function handleExportPdf() {
       />
 
       <!-- Editor + Preview split view -->
-      <SplitView v-else v-model="paneMode" :word-wrap="wordWrap" @toggle-word-wrap="wordWrap = !wordWrap">
+      <SplitView
+        v-else
+        v-model="paneMode"
+        :word-wrap="wordWrap"
+        :zoom="zoomLevel"
+        @toggle-word-wrap="wordWrap = !wordWrap"
+        @zoom-in="zoomLevel = Math.min(3, zoomLevel * 1.1)"
+        @zoom-out="zoomLevel = Math.max(0.5, zoomLevel / 1.1)"
+        @reveal-in-finder="revealInFinder"
+      >
         <template #editor>
           <EditorPane
             v-model="editorContent"
@@ -268,6 +297,7 @@ async function handleExportPdf() {
             :pdf-url="pdfUrl"
             :loading="pdfLoading"
             :error="lastError"
+            :zoom="zoomLevel"
             @iframe-ready="(el: HTMLIFrameElement) => previewIframeRef = el"
           />
         </template>

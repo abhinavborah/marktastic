@@ -35,16 +35,18 @@ function getThemeExtensions(isDark: boolean) {
             'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
         },
         ".cm-content": {
-          padding: "12px 16px",
           minHeight: "100%",
         },
+        ".cm-line": {
+          padding: "0 16px",
+        },
         ".cm-gutters": {
-          padding: "12px 0",
           borderRight: "1px solid hsl(var(--border) / 1)",
         },
         ".cm-lineNumbers .cm-gutterElement": {
           color: "hsl(var(--muted-foreground) / 1)",
           padding: "0 8px",
+          minWidth: "2.5em",
         },
       },
       { dark: isDark }

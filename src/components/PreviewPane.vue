@@ -5,6 +5,7 @@ const props = defineProps<{
   pdfUrl: string | null;
   loading: boolean;
   error: string | null;
+  zoom?: number;
 }>();
 
 const emit = defineEmits<{
@@ -105,13 +106,23 @@ watch(() => props.pdfUrl, () => {
           <span class="text-sm">Loading PDF...</span>
         </div>
       </div>
-      <iframe
-        ref="iframeRef"
-        :src="pdfUrl ?? undefined"
-        class="flex-1 w-full border-0 bg-white"
-        title="PDF Preview"
-        @load="onIframeLoad"
-      />
+      <div
+        class="flex-1 w-full overflow-auto"
+        :style="{
+          transform: `scale(${props.zoom ?? 1})`,
+          transformOrigin: 'top left',
+          width: `${100 / (props.zoom ?? 1)}%`,
+          height: `${100 / (props.zoom ?? 1)}%`,
+        }"
+      >
+        <iframe
+          ref="iframeRef"
+          :src="pdfUrl ?? undefined"
+          class="w-full h-full border-0 bg-white"
+          title="PDF Preview"
+          @load="onIframeLoad"
+        />
+      </div>
     </template>
   </div>
 </template>

@@ -6,11 +6,15 @@ type PaneMode = "both" | "editor" | "preview";
 const props = defineProps<{
   modelValue: PaneMode;
   wordWrap?: boolean;
+  zoom?: number;
 }>();
 
 const emit = defineEmits<{
   (e: "update:modelValue", mode: PaneMode): void;
   (e: "toggleWordWrap"): void;
+  (e: "zoomIn"): void;
+  (e: "zoomOut"): void;
+  (e: "revealInFinder"): void;
 }>();
 
 const paneMode = computed({
@@ -72,6 +76,11 @@ onBeforeUnmount(() => {
 function togglePane(mode: PaneMode) {
   paneMode.value = mode;
 }
+
+const zoomPercent = computed(() => {
+  const z = props.zoom ?? 1;
+  return Math.round(z * 100) + "%";
+});
 </script>
 
 <template>
@@ -102,10 +111,11 @@ function togglePane(mode: PaneMode) {
       <slot name="preview" />
     </div>
 
-    <!-- Pane toggle buttons (floating) -->
+    <!-- Floating controls -->
     <div
       class="absolute top-2 right-2 flex gap-1 bg-card/90 backdrop-blur-sm border rounded-md p-1 shadow-sm z-20"
     >
+      <!-- Pane mode buttons -->
       <button
         class="p-1.5 rounded hover:bg-muted transition-colors"
         :class="{ 'bg-muted': paneMode === 'editor' }"
@@ -142,6 +152,7 @@ function togglePane(mode: PaneMode) {
 
       <div class="w-px h-4 bg-border mx-0.5" />
 
+      <!-- Word wrap -->
       <button
         class="p-1.5 rounded hover:bg-muted transition-colors"
         :class="{ 'bg-muted': wordWrap }"
@@ -150,6 +161,53 @@ function togglePane(mode: PaneMode) {
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M4 7h16M4 12h12M4 17h8" />
+        </svg>
+      </button>
+
+      <div class="w-px h-4 bg-border mx-0.5" />
+
+      <!-- Zoom out -->
+      <button
+        class="p-1.5 rounded hover:bg-muted transition-colors"
+        title="Zoom out"
+        @click="$emit('zoomOut')"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          <line x1="8" y1="11" x2="14" y2="11" />
+        </svg>
+      </button>
+
+      <!-- Zoom percent -->
+      <span class="flex items-center px-1 text-xs text-muted-foreground min-w-[3em] justify-center select-none">
+        {{ zoomPercent }}
+      </span>
+
+      <!-- Zoom in -->
+      <button
+        class="p-1.5 rounded hover:bg-muted transition-colors"
+        title="Zoom in"
+        @click="$emit('zoomIn')"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          <line x1="11" y1="8" x2="11" y2="14" />
+          <line x1="8" y1="11" x2="14" y2="11" />
+        </svg>
+      </button>
+
+      <div class="w-px h-4 bg-border mx-0.5" />
+
+      <!-- Reveal in Finder -->
+      <button
+        class="p-1.5 rounded hover:bg-muted transition-colors"
+        title="Reveal in Finder"
+        @click="$emit('revealInFinder')"
+      >
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 8.93 2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z" />
         </svg>
       </button>
     </div>
