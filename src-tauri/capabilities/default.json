@@ -12,6 +12,8 @@
     "fs:allow-document-write-recursive",
     "fs:allow-download-write-recursive",
     "fs:allow-desktop-write-recursive",
+    "fs:allow-temp-write-recursive",
+    "fs:allow-temp-read-recursive",
     "shell:default"
   ]
 }

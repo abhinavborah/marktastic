@@ -106,23 +106,18 @@ watch(() => props.pdfUrl, () => {
           <span class="text-sm">Loading PDF...</span>
         </div>
       </div>
-      <div
-        class="flex-1 w-full overflow-auto"
+      <iframe
+        ref="iframeRef"
+        :src="pdfUrl ?? undefined"
+        class="flex-1 w-full border-0"
         :style="{
-          transform: `scale(${props.zoom ?? 1})`,
-          transformOrigin: 'top left',
-          width: `${100 / (props.zoom ?? 1)}%`,
+          zoom: props.zoom ?? 1,
           height: `${100 / (props.zoom ?? 1)}%`,
+          minHeight: '100%',
         }"
-      >
-        <iframe
-          ref="iframeRef"
-          :src="pdfUrl ?? undefined"
-          class="w-full h-full border-0 bg-white"
-          title="PDF Preview"
-          @load="onIframeLoad"
-        />
-      </div>
+        title="PDF Preview"
+        @load="onIframeLoad"
+      />
     </template>
   </div>
 </template>

@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { open as openInShell } from "@tauri-apps/plugin-shell";
+import { join, tempDir } from "@tauri-apps/api/path";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
@@ -196,21 +197,21 @@ async function handleOpenFolder() {
   }
 }
 
-// ─── Reveal in Finder ───
-async function revealInFinder() {
-  const path = currentFilePath.value || currentFolderPath.value;
-  if (!path) {
-    toast.warning("No file or folder open");
+// ─── Open in Preview ───
+async function openInPreview() {
+  if (!pdfBytes.value || pdfBytes.value.length === 0) {
+    toast.warning("No PDF to preview. Open a file first.");
     return;
   }
-  // Extract folder path: remove filename if it's a file
-  const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-  const folder = lastSlash >= 0 ? path.substring(0, lastSlash + 1) : path;
   try {
-    await openInShell(folder);
-  } catch (err) {
-    console.error("Failed to reveal in finder:", err);
-    toast.error("Failed to open folder");
+    const temp = await tempDir();
+    const tempPath = await join(temp, "marktastic-preview.pdf");
+    await writeFile(tempPath, pdfBytes.value);
+    await openInShell(tempPath);
+    toast.success("Opened PDF in system preview");
+  } catch (err: any) {
+    console.error("Failed to open preview:", err);
+    toast.error(`Preview failed: ${err?.message || String(err)}`);
   }
 }
 
@@ -282,7 +283,7 @@ async function handleExportPdf() {
         @toggle-word-wrap="wordWrap = !wordWrap"
         @zoom-in="zoomLevel = Math.min(3, zoomLevel * 1.1)"
         @zoom-out="zoomLevel = Math.max(0.5, zoomLevel / 1.1)"
-        @reveal-in-finder="revealInFinder"
+        @open-in-preview="openInPreview"
       >
         <template #editor>
           <EditorPane

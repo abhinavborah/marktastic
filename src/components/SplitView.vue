@@ -14,7 +14,7 @@ const emit = defineEmits<{
   (e: "toggleWordWrap"): void;
   (e: "zoomIn"): void;
   (e: "zoomOut"): void;
-  (e: "revealInFinder"): void;
+  (e: "openInPreview"): void;
 }>();
 
 const paneMode = computed({
@@ -200,14 +200,16 @@ const zoomPercent = computed(() => {
 
       <div class="w-px h-4 bg-border mx-0.5" />
 
-      <!-- Reveal in Finder -->
+      <!-- Open in Preview -->
       <button
         class="p-1.5 rounded hover:bg-muted transition-colors"
-        title="Reveal in Finder"
-        @click="$emit('revealInFinder')"
+        title="Open PDF in system preview"
+        @click="$emit('openInPreview')"
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 8.93 2H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2z" />
+          <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="12" y1="18" x2="12.01" y2="18" />
         </svg>
       </button>
     </div>
