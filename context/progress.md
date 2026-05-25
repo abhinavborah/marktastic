@@ -541,3 +541,21 @@ Replaced the iframe-based PDF preview with a Rust PDFium renderer that converts 
 ### Compilation after fix
 - `npm run build` ✅
 - `cargo check` ✅
+
+## Fix Wide Gaps Between Pages — 2026-05-26
+
+### Issue: Massive vertical gaps between PDF pages
+**Root cause:** `transform: scale()` only affects visual rendering — it does NOT shrink the element's layout box. Each page image is rendered at 2.0× (e.g., 2000px tall). Even with `transform: scale(0.5)`, the layout box stays 2000px tall. The flex container allocates 2000px + padding for each page, creating giant gaps.  
+**Fix:** Replaced `transform: scale(displayScale)` with the CSS `zoom: displayScale` property on the `<img>` element. Unlike `transform`, `zoom` scales both the visual size AND the layout box. At `zoom: 0.5`, a 2000px image becomes 1000px in both visual and layout. Removed `transformOrigin`, `maxWidth: 'none'`, and `width` compensation since `zoom` handles layout automatically.
+
+### Behavior
+- Pages now appear with normal spacing (just `p-4` padding, no giant gaps)
+- Zoom in/out resizes pages smoothly with no gap changes
+- Still zero Rust re-render on zoom — pure CSS instant zoom
+
+### Files changed
+- `src/components/PreviewPane.vue`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅

@@ -62,10 +62,7 @@ const displayScale = computed(() => props.zoom / 2.0);
           :alt="`Page ${i + 1}`"
           class="shadow-lg"
           :style="{
-            transform: `scale(${displayScale})`,
-            transformOrigin: 'top center',
-            maxWidth: 'none',
-            width: `${100 / displayScale}%`,
+            zoom: displayScale,
             backgroundColor: 'white',
           }"
         />
