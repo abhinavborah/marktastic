@@ -83,12 +83,59 @@ Before starting work, read:
 - `context7` — for Tauri v2 and Typst crate documentation lookups
 
 ## Next Actions (Phase 6)
+**Current state:** P0 Fix 1 done (code, not committed). App should be less frozen but debounce may not be working correctly (invalid Vue API for watch debounce).
+**Next agent action:** Commit P0 Fix 1, then implement P0 Fix 2 (requestIdleCallback).
+
 1. Cross-platform build configuration (`tauri.conf.json` bundle settings for macOS, Windows, Linux)
 2. GitHub Actions CI workflow for automated builds on push/tag
 3. GitHub Releases setup with signed binaries
 4. App code signing configuration (macOS notarization, Windows code signing if available)
 5. Update `README.md` with installation and usage instructions
 6. Tag v0.1.0 release
+
+---
+
+## P0 Performance Fixes (Live Preview Freezing)
+
+Implemented to fix app freezing when typing in the editor.
+
+### P0 Fix 1 & 2: ✅ Both committed in 48af1aa
+**Problem:** Two causes of main-thread blocking causing editor freeze:
+1. Vue `v-html` parsed SVG XML into DOM nodes on main JS thread
+2. Synchronous `pages.value = result` caused Vue to update DOM immediately after Rust response
+
+**Solution (committed):**
+- `PreviewPane.vue`: Replaced `v-html` with `<img>` tags using SVG data URLs — browser parses SVG off the main JS thread
+- `useSvgRenderer.ts`: Added `requestIdleCallback` yield before `pages.value = result` — gives CodeMirror time to process pending keystrokes before DOM update
+
+**Files changed:** `src/components/PreviewPane.vue`, `src/composables/useSvgRenderer.ts`
+**Commit:** `48af1aa` — "replace v-html svg injection with img data urls to prevent main thread blocking"
+
+---
+
+## Remaining P0 Fixes (Not Yet Implemented)
+
+### P0 Fix 3: Debounce verification + dedupe in useSvgRenderer
+**Problem:** Vue `watch` doesn't have a built-in debounce option. The `{ debounce: 500 }` option in `watch()` is invalid Vue API — compilation may not be properly debounced.
+**Solution:** Implement manual debounce with `setTimeout`/`clearTimeout`. Also add dedupe to prevent recompile of identical documents.
+**Files likely to change:** `src/composables/useSvgRenderer.ts`, `src/components/EditorPane.vue`
+**Test:** Type in editor → preview updates after ~300ms of inactivity, not instantly.
+
+---
+
+## P1 Speed Fixes (Planned)
+
+Implement after all P0 fixes are validated:
+
+### P1 Fix 1: Lower debounce to 300ms with 500ms maxWait
+**Problem:** 500ms debounce feels sluggish for a live preview.
+**Solution:** Change debounce to 300ms with a maxWait of 500ms (fires at least every 500ms during continuous typing).
+**Files likely to change:** `src/composables/useSvgRenderer.ts`
+
+### P1 Fix 2: Request versioning (cancel stale results)
+**Problem:** If user types while a compile is running, the old result can overwrite the new result when it finally arrives.
+**Solution:** Add a version counter. Each compile increments the version. If returned version < current version, discard result.
+**Files likely to change:** `src/composables/useSvgRenderer.ts`, `src-tauri/src/lib.rs`
 
 ---
 
