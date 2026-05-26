@@ -569,7 +569,7 @@ Planned sequential performance improvements. Each fix will be implemented one at
 | Fix | Description | Status |
 |-----|-------------|--------|
 | 1 | Background threads (`spawn_blocking`) — moves Rust computation off main thread | `completed` |
-| 2 | Viewport page rendering — only render visible pages | `pending` |
+| 2 | Viewport page rendering — only render visible pages | `in_progress` |
 | 3 | Page caching — hash-based cache for unchanged pages | `pending` |
 | 4 | Persistent Typst World — incremental compilation | `pending` |
 | 5 | SVG output — replace PNG pipeline with SVG | `pending` |
@@ -610,3 +610,51 @@ Planned sequential performance improvements. Each fix will be implemented one at
 ### Compilation after fix
 - `npm run build` ✅
 - `cargo check` ✅
+- **User validated:** UI stays responsive during Typst compilation and PDFium rendering. Spinner animation is smooth, buttons and theme toggle work while PDF compiles.
+
+## Fix 2: Viewport Page Rendering — 2026-05-26
+
+### Issue: All PDF pages rendered on every keystroke
+**Root cause:** `usePdfRenderer.ts` called `render_pdf_pages` which rendered ALL pages to PNG. A 30-page document did 30× the work of a 1-page document. Every markdown edit triggered a full re-render of every page.  
+**Fix:**
+1. **Added `render_pdf_page_range` to `pdfium_renderer.rs`:** Renders only specific page numbers passed as a Vec, skipping pages not in the list.
+2. **Added `get_pdf_page_count` to `pdfium_renderer.rs`:** Returns the total number of pages without rendering anything.
+3. **Added two new Tauri commands in `lib.rs`:**
+   - `get_pdf_page_count(pdf_bytes) -> u16`
+   - `render_pdf_page_range(pdf_bytes, page_numbers, zoom, dpr) -> Vec<(usize, String)>`
+   Both wrapped in `spawn_blocking` like all other commands.
+4. **Rewrote `usePdfRenderer.ts`:**
+   - Added module-scoped `pageCache: Map<number, string>` that persists across renders
+   - On `pdfBytes` change: calls `get_pdf_page_count`, clears cache, sets visible pages to {0,1,2}, renders those
+   - On `visiblePageNumbers` change: checks which visible pages are NOT in cache, calls `render_pdf_page_range` for only those missing pages, merges results into cache
+   - Exports `cachedPages` (computed array with `null` for uncached pages) and `totalPages`
+5. **Updated `PreviewPane.vue`:**
+   - Added `IntersectionObserver` with 200px rootMargin to detect which pages are near the viewport
+   - Emits `@update:visiblePages` with buffered set (visible page ± 1 neighbor)
+   - Shows `<img>` for cached pages, gray placeholder with "Page N" label for uncached pages
+   - Added "Loading pages..." badge in top-right when rendering additional pages
+6. **Updated `App.vue`:**
+   - Added `visiblePageNumbers` ref (initially {0,1,2})
+   - Passed to `usePdfRenderer(pdfBytes, visiblePageNumbers)`
+   - Bound `:total-pages="totalPages"` and `@update:visible-pages` on `PreviewPane`
+
+### Behavior
+- Open a multi-page PDF → first 3 pages render immediately
+- Scroll down → IntersectionObserver detects new pages entering viewport → `visiblePages` updates → missing pages are rendered on-demand
+- Scroll back up → previously rendered pages show instantly from cache (no Rust call)
+- Typing in editor → `pdfBytes` changes → cache clears → first 3 pages re-render
+- UI stays responsive throughout (Fix 1 background threads)
+
+### Files changed
+- `src-tauri/src/pdfium_renderer.rs`
+- `src-tauri/src/lib.rs`
+- `src/composables/usePdfRenderer.ts`
+- `src/components/PreviewPane.vue`
+- `src/App.vue`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅
+
+### Status
+Awaiting user validation before marking `completed`.

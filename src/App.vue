@@ -50,9 +50,12 @@ const { pdfBytes, pdfLoading, lastError } = usePdf(
   toast
 );
 
+const visiblePageNumbers = ref(new Set<number>([0, 1, 2]));
+
 // ─── PDF Image Renderer ───
-const { pages, rendering: imageRendering, renderError } = usePdfRenderer(
-  pdfBytes
+const { pages, totalPages, rendering: imageRendering, renderError } = usePdfRenderer(
+  pdfBytes,
+  visiblePageNumbers
 );
 
 const previewLoading = computed(() => pdfLoading.value || imageRendering.value);
@@ -311,9 +314,11 @@ async function handleExportPdf() {
         <template #preview>
           <PreviewPane
             :pages="pages"
+            :total-pages="totalPages"
             :rendering="previewLoading"
             :error="previewError"
             :zoom="zoomLevel"
+            @update:visible-pages="visiblePageNumbers = $event"
           />
         </template>
       </SplitView>

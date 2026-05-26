@@ -212,6 +212,31 @@ async fn render_pdf_pages(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// Get the total number of pages in a PDF.
+#[tauri::command]
+async fn get_pdf_page_count(pdf_bytes: Vec<u8>) -> Result<u16, String> {
+    tokio::task::spawn_blocking(move || {
+        pdfium_renderer::get_pdf_page_count(&pdf_bytes)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
+/// Render only specific pages of a PDF to PNG images.
+#[tauri::command]
+async fn render_pdf_page_range(
+    pdf_bytes: Vec<u8>,
+    page_numbers: Vec<usize>,
+    zoom: f64,
+    device_pixel_ratio: f64,
+) -> Result<Vec<(usize, String)>, String> {
+    tokio::task::spawn_blocking(move || {
+        pdfium_renderer::render_pdf_page_range(&pdf_bytes, page_numbers, zoom, device_pixel_ratio)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -227,6 +252,8 @@ pub fn run() {
             open_folder,
             get_templates,
             render_pdf_pages,
+            get_pdf_page_count,
+            render_pdf_page_range,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

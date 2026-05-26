@@ -305,3 +305,13 @@ These are agent workspace files. They are present in the working directory but e
 - `context/` (task_plan.md, findings.md, progress.md)
 
 Do NOT add them to `.gitignore` — the agent exercises judgment on what to commit.
+
+---
+
+## Performance Optimization Progress
+
+### Fix 1: Background Threads (`spawn_blocking`) — COMPLETED ✅
+All Tauri commands converted to `async fn` with `tokio::task::spawn_blocking`. Typst compilation and PDFium rendering now run on the blocking thread pool. UI stays fully responsive during heavy computation. User validated.
+
+### Fix 2: Viewport Page Rendering — IMPLEMENTED, AWAITING VALIDATION
+Added `render_pdf_page_range` and `get_pdf_page_count` Rust commands. Rewrote `usePdfRenderer.ts` with a module-scoped page cache and lazy rendering. `PreviewPane.vue` uses `IntersectionObserver` with 200px buffer to detect visible pages and shows gray placeholders for uncached pages. Only pages near the viewport are rendered; scrolling loads more on-demand. Cache persists across scrolls for instant back-navigation.
