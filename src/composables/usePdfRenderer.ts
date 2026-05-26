@@ -1,128 +1,200 @@
 import { ref, watch, type Ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
-// Cache: page number → data URL (persists across renders, module-scoped)
-const pageCache = new Map<number, string>();
+// Persistent cross-compile cache: "pdfHash:pageNum:zoom" → dataUrl
+const persistentCache = new Map<string, string>();
+
+function getCacheKey(pdfHash: string, pageNum: number, zoom: number): string {
+  return `${pdfHash}:${pageNum}:${zoom}`;
+}
+
+async function hashBytes(bytes: Uint8Array): Promise<string> {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", bytes);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 16);
+}
 
 const pages = ref<(string | null)[]>([]);
+const stalePages = ref<(string | null)[]>([]);
 const totalPages = ref(0);
 const rendering = ref(false);
 const renderError = ref<string | null>(null);
+const isRecompiling = ref(false);
+const currentPdfHash = ref("");
 
 export function usePdfRenderer(
   pdfBytesRef: Ref<Uint8Array | null>,
   visiblePageNumbersRef: Ref<Set<number>>
 ) {
-  async function renderMissingPages() {
-    if (!pdfBytesRef.value || pdfBytesRef.value.length === 0) return;
-
-    const visible = visiblePageNumbersRef.value;
-    if (visible.size === 0) {
-      console.log("[usePdfRenderer] renderMissingPages: visible set is empty, skipping");
+  async function renderForPdfBytes(bytes: Uint8Array | null) {
+    if (!bytes || bytes.length === 0) {
+      pages.value = [];
+      stalePages.value = [];
+      totalPages.value = 0;
+      isRecompiling.value = false;
+      rendering.value = false;
       return;
     }
 
-    const missingPages: number[] = [];
-    for (const pageNum of visible) {
-      if (!pageCache.has(pageNum)) {
-        missingPages.push(pageNum);
-      }
-    }
+    const newPdfHash = await hashBytes(bytes);
+    const newZoom = 2.0;
+    currentPdfHash.value = newPdfHash;
 
-    console.log("[usePdfRenderer] renderMissingPages: visible=", Array.from(visible), "missing=", missingPages);
-
-    if (missingPages.length === 0) {
-      console.log("[usePdfRenderer] renderMissingPages: all visible pages already cached");
-      return;
-    }
-
+    // Save current display as stale for smooth stale-while-revalidate transition
+    stalePages.value = [...pages.value];
+    isRecompiling.value = true;
     rendering.value = true;
     renderError.value = null;
 
+    // Get page count
+    let count: number;
     try {
-      const dpr = window.devicePixelRatio || 1;
-      console.log("[usePdfRenderer] invoking render_pdf_page_range for pages:", missingPages);
-      const result = await invoke<Array<[number, string]>>("render_pdf_page_range", {
-        pdfBytes: Array.from(pdfBytesRef.value),
-        pageNumbers: missingPages,
-        zoom: 2.0,
-        devicePixelRatio: dpr,
+      count = await invoke<number>("get_pdf_page_count", {
+        pdfBytes: Array.from(bytes),
       });
-
-      console.log("[usePdfRenderer] received", result.length, "rendered pages");
-
-      for (const [pageNum, dataUrl] of result) {
-        pageCache.set(pageNum, dataUrl);
-      }
-
-      // Update the reactive pages array directly so Vue detects the change
-      const newPages = [...pages.value];
-      for (let i = 0; i < totalPages.value; i++) {
-        const cached = pageCache.get(i);
-        if (cached !== undefined) {
-          newPages[i] = cached;
-        }
-      }
-      pages.value = newPages;
-      console.log("[usePdfRenderer] pages.value updated, cached count:", pageCache.size, "/", totalPages.value);
     } catch (err: any) {
       renderError.value = String(err);
-      console.error("[usePdfRenderer] PDF page rendering failed:", err);
+      isRecompiling.value = false;
+      rendering.value = false;
+      return;
+    }
+
+    totalPages.value = count;
+
+    // Build display: cache hit → cached image, cache miss → stale page fallback
+    const merged: (string | null)[] = [];
+    const toRender: number[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const key = getCacheKey(newPdfHash, i, newZoom);
+      const cached = persistentCache.get(key);
+      if (cached) {
+        merged[i] = cached;
+      } else if (i < stalePages.value.length && stalePages.value[i]) {
+        merged[i] = stalePages.value[i]; // show stale while re-rendering
+        toRender.push(i);
+      } else {
+        merged[i] = null;
+        toRender.push(i);
+      }
+    }
+
+    pages.value = merged;
+
+    if (toRender.length === 0) {
+      rendering.value = false;
+      isRecompiling.value = false;
+      return;
+    }
+
+    // Render visible pages first (priority)
+    const visible = visiblePageNumbersRef.value;
+    const visibleToRender = toRender.filter((p) => visible.has(p));
+    const hiddenToRender = toRender.filter((p) => !visible.has(p));
+
+    if (visibleToRender.length > 0) {
+      try {
+        const dpr = window.devicePixelRatio || 1;
+        const result = await invoke<Array<[number, string]>>("render_pdf_page_range", {
+          pdfBytes: Array.from(bytes),
+          pageNumbers: visibleToRender,
+          zoom: newZoom,
+          devicePixelRatio: dpr,
+        });
+        const updated = [...pages.value];
+        for (const [pageNum, dataUrl] of result) {
+          updated[pageNum] = dataUrl;
+          persistentCache.set(getCacheKey(newPdfHash, pageNum, newZoom), dataUrl);
+        }
+        pages.value = updated;
+      } catch (err: any) {
+        renderError.value = String(err);
+      }
+    }
+
+    // Render hidden pages in background
+    if (hiddenToRender.length > 0) {
+      try {
+        const dpr = window.devicePixelRatio || 1;
+        const result = await invoke<Array<[number, string]>>("render_pdf_page_range", {
+          pdfBytes: Array.from(bytes),
+          pageNumbers: hiddenToRender,
+          zoom: newZoom,
+          devicePixelRatio: dpr,
+        });
+        const updated = [...pages.value];
+        for (const [pageNum, dataUrl] of result) {
+          updated[pageNum] = dataUrl;
+          persistentCache.set(getCacheKey(newPdfHash, pageNum, newZoom), dataUrl);
+        }
+        pages.value = updated;
+      } catch {
+        // silent for hidden pages
+      }
+    }
+
+    rendering.value = false;
+    isRecompiling.value = false;
+  }
+
+  async function renderOnScroll() {
+    const bytes = pdfBytesRef.value;
+    if (!bytes || bytes.length === 0) return;
+    if (!currentPdfHash.value) return;
+
+    const hash = currentPdfHash.value;
+    const zoom = 2.0;
+    const visible = visiblePageNumbersRef.value;
+
+    const toRender: number[] = [];
+    for (const pageNum of visible) {
+      if (pageNum >= totalPages.value) continue;
+      const key = getCacheKey(hash, pageNum, zoom);
+      if (!persistentCache.has(key)) {
+        toRender.push(pageNum);
+      }
+    }
+
+    if (toRender.length === 0) return;
+
+    rendering.value = true;
+    try {
+      const dpr = window.devicePixelRatio || 1;
+      const result = await invoke<Array<[number, string]>>("render_pdf_page_range", {
+        pdfBytes: Array.from(bytes),
+        pageNumbers: toRender,
+        zoom,
+        devicePixelRatio: dpr,
+      });
+      const updated = [...pages.value];
+      for (const [pageNum, dataUrl] of result) {
+        updated[pageNum] = dataUrl;
+        persistentCache.set(getCacheKey(hash, pageNum, zoom), dataUrl);
+      }
+      pages.value = updated;
+    } catch (err: any) {
+      renderError.value = String(err);
     } finally {
       rendering.value = false;
     }
   }
 
-  // When pdfBytes changes: get page count, clear cache, render first visible pages
+  // When pdfBytes changes: full recompile with stale-while-revalidate
   watch(
     () => pdfBytesRef.value,
     async (bytes) => {
-      console.log("[usePdfRenderer] pdfBytes changed, bytes length:", bytes?.length ?? 0);
-      pageCache.clear();
-      pages.value = [];
-      totalPages.value = 0;
-      renderError.value = null;
-
-      if (!bytes || bytes.length === 0) return;
-
-      try {
-        const count = await invoke<number>("get_pdf_page_count", {
-          pdfBytes: Array.from(bytes),
-        });
-        console.log("[usePdfRenderer] PDF page count:", count);
-        totalPages.value = count;
-
-        // Initialize pages array with nulls
-        pages.value = new Array(count).fill(null);
-
-        // Default to first 3 pages visible
-        const initial = new Set<number>();
-        for (let i = 0; i < Math.min(3, count); i++) {
-          initial.add(i);
-        }
-        visiblePageNumbersRef.value = initial;
-        console.log("[usePdfRenderer] set initial visible pages:", Array.from(initial));
-
-        await renderMissingPages();
-      } catch (err: any) {
-        renderError.value = String(err);
-        console.error("[usePdfRenderer] Failed to get PDF page count:", err);
-      }
+      await renderForPdfBytes(bytes);
     },
     { immediate: false }
   );
 
-  // When visible pages change: render missing ones
+  // When visible pages change (scroll): render any uncached visible pages
   watch(
-    visiblePageNumbersRef,
-    (newVal, oldVal) => {
-      const newStr = Array.from(newVal).sort().join(",");
-      const oldStr = Array.from(oldVal).sort().join(",");
-      if (newStr === oldStr) return;
-      console.log("[usePdfRenderer] visiblePageNumbers changed:", oldStr, "→", newStr);
-      renderMissingPages();
-    },
-    { deep: true }
+    () => Array.from(visiblePageNumbersRef.value).sort().join(","),
+    async () => {
+      if (isRecompiling.value) return; // renderForPdfBytes already handles visible pages
+      await renderOnScroll();
+    }
   );
 
   return {
@@ -130,5 +202,6 @@ export function usePdfRenderer(
     totalPages,
     rendering,
     renderError,
+    isRecompiling,
   };
 }

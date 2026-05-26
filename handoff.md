@@ -313,5 +313,14 @@ Do NOT add them to `.gitignore` — the agent exercises judgment on what to comm
 ### Fix 1: Background Threads (`spawn_blocking`) — COMPLETED ✅
 All Tauri commands converted to `async fn` with `tokio::task::spawn_blocking`. Typst compilation and PDFium rendering now run on the blocking thread pool. UI stays fully responsive during heavy computation. User validated.
 
-### Fix 2: Viewport Page Rendering — IMPLEMENTED, AWAITING VALIDATION
-Added `render_pdf_page_range` and `get_pdf_page_count` Rust commands. Rewrote `usePdfRenderer.ts` with a module-scoped page cache and lazy rendering. `PreviewPane.vue` uses `IntersectionObserver` with 200px buffer to detect visible pages and shows gray placeholders for uncached pages. Only pages near the viewport are rendered; scrolling loads more on-demand. Cache persists across scrolls for instant back-navigation.
+### Fix 2: Viewport Page Rendering — COMPLETED ✅
+Added `render_pdf_page_range` and `get_pdf_page_count` Rust commands. Rewrote `usePdfRenderer.ts` with a module-scoped page cache and lazy rendering. `PreviewPane.vue` uses `IntersectionObserver` with 200px buffer to detect visible pages and shows gray placeholders for uncached pages. Only pages near the viewport are rendered; scrolling loads more on-demand. Cache persists across scrolls for instant back-navigation. Initial bug (all-gray placeholders) was caused by a non-reactive `Map` in a computed property; fixed by returning the reactive `pages` ref directly. User validated.
+
+### Fix 3: Page Caching by Content Hash — IN PROGRESS
+Implemented persistent cross-compile cache keyed by `(pdfHash, pageNum, zoom)` with stale-while-revalidate UX. Old pages stay visible during recompile; a sticky "Recompiling..." badge indicates stale state. Cache persists across document switches via module-scoped Map. SHA-256 hash of PDF bytes determines cache hits. Awaiting user validation.
+
+### Fix 4: Persistent Typst World — READY TO START
+Keep the Typst compiler alive between invocations, update only changed source. Text-only edits drop from ~500ms to ~50-150ms.
+
+### Fix 5: SVG Output — READY TO START
+Replace PNG pipeline entirely with SVG output from Typst. Near-instant updates, selectable text, smallest bundle.

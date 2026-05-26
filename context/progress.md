@@ -569,8 +569,8 @@ Planned sequential performance improvements. Each fix will be implemented one at
 | Fix | Description | Status |
 |-----|-------------|--------|
 | 1 | Background threads (`spawn_blocking`) — moves Rust computation off main thread | `completed` |
-| 2 | Viewport page rendering — only render visible pages | `in_progress` |
-| 3 | Page caching — hash-based cache for unchanged pages | `pending` |
+| 2 | Viewport page rendering — only render visible pages | `completed` |
+| 3 | Page caching — hash-based cache for unchanged pages | `in_progress` |
 | 4 | Persistent Typst World — incremental compilation | `pending` |
 | 5 | SVG output — replace PNG pipeline with SVG | `pending` |
 
@@ -657,4 +657,98 @@ Planned sequential performance improvements. Each fix will be implemented one at
 - `cargo check` ✅
 
 ### Status
-Awaiting user validation before marking `completed`.
+**Completed** — validated by user. Root cause of initial all-gray-placeholder bug was that `cachedPages` computed property read from a non-reactive plain JS `Map`; Vue never detected cache updates. Fixed by returning the reactive `pages` ref directly and updating it after each render batch. IntersectionObserver correctly watches the scrolling container (`root: scrollerRef.value`).
+
+## Fix 3: Page Caching by Content Hash — 2026-05-26
+
+### Issue: Flashing gray placeholders on every keystroke
+**Root cause:** When `pdfBytes` changed (after the 500ms editor debounce), `usePdfRenderer.ts` immediately cleared `pages.value` to empty, causing all pages to flash to gray placeholders. Then Rust compiled + rendered new pages, which arrived 200ms–2s later. The user saw a jarring flash on every keystroke.  
+**Fix:** Implemented stale-while-revalidate with a persistent cross-compile cache keyed by `(pdfHash, pageNum, zoom)`:
+
+1. **Persistent cache in `usePdfRenderer.ts`:**
+   - Module-scoped `persistentCache: Map<string, string>` where key = `${pdfHash}:${pageNum}:${zoom}`
+   - `hashBytes()` computes SHA-256 of the PDF bytes via Web Crypto API
+   - Cache persists across document switches and app sessions (module-level)
+
+2. **Stale-while-revalidate flow:**
+   - On `pdfBytes` change: compute hash, save current `pages.value` to `stalePages`, set `isRecompiling = true`
+   - For each page: check persistent cache → if hit, show cached image immediately. If miss, show stale page from previous compile as fallback.
+   - Old pages stay visible (no flash to placeholders). A sticky "Recompiling..." badge appears at the top of the preview.
+   - Render visible pages first (priority), hidden pages in background.
+   - When new renders arrive, they overwrite stale pages in `pages.value`.
+   - `isRecompiling = false` when all pages are rendered.
+
+3. **Scroll-triggered rendering:**
+   - On scroll, `renderOnScroll()` checks which visible pages are NOT in the persistent cache for the current PDF hash.
+   - Only uncached pages are rendered. Previously rendered pages show instantly.
+   - Guard: skip scroll render while `isRecompiling` is true (already handled by `renderForPdfBytes`).
+
+4. **PreviewPane.vue updates:**
+   - Added `isRecompiling` prop
+   - Sticky "Recompiling..." badge at top of scroll container (above pages, not floating)
+   - Badge has `z-30` to stay above page content
+
+5. **App.vue updates:**
+   - Wired `isRecompiling` from `usePdfRenderer` to `PreviewPane`
+
+### Behavior
+- Type in editor → 500ms debounce → pdfBytes changes → old pages stay visible → "Recompiling..." badge appears → new pages render in background → swap in smoothly when ready
+- If you UNDO exactly to previous state → SHA-256 hash matches → all pages load instantly from persistent cache → zero Rust calls
+- Scroll down → new pages render on demand, cached for next time
+- Large documents: only visible pages re-render first, hidden pages in background
+
+### Files changed
+- `src/composables/usePdfRenderer.ts`
+- `src/components/PreviewPane.vue`
+- `src/App.vue`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅
+
+### Status
+`in_progress` — awaiting user validation.
+
+## Unified Toast Notifications — 2026-05-26
+
+### Issue: Inconsistent notification styling and positioning
+**Root cause:** ToastContainer used bottom-right fixed position with colored-background cards (green for success, red for error, etc.). The "Recompiling" badge in PreviewPane used a different style (`bg-card/90 backdrop-blur-sm border rounded-full` pill badge). Two separate notification systems with different visuals.  
+**Fix:**
+1. **Redesigned `ToastContainer.vue`:**
+   - Moved from `fixed bottom-4 right-4` to an `absolute top-2` container inside `<main>` (top-center of content)
+   - Unified style: all toasts use `bg-card/90 backdrop-blur-sm border rounded-full px-3 py-1.5 text-xs shadow-sm w-fit` pill badge
+   - Color-coded via text color classes (`text-green-600`, `text-red-600`, `text-amber-600`, `text-muted-foreground`) instead of background colors
+   - SVG icons for each type (spinner for info/loading, checkmark for success, triangle for warning, X circle for error)
+   - Transition animation: fade + slide from top (`translateY(-8px)`)
+
+2. **Updated `useToast.ts`:**
+   - Added `loading` type to ToastType
+   - Added `dismiss(id)` method for manual toast removal
+   - Added `loading(message, duration?)` function
+   - `duration: 0` disables auto-dismiss (used for "Recompiling..." toast)
+
+3. **Updated `PreviewPane.vue`:**
+   - Removed `isRecompiling` prop
+   - Removed sticky "Recompiling..." badge from the template
+   - Kept the "Loading pages..." absolute badge (for scroll-triggered page loading)
+
+4. **Updated `App.vue`:**
+   - Moved `<ToastContainer>` inside `<main>` at `absolute top-2 left-0 right-0 z-30 flex justify-center`
+   - Added `watch(isRecompiling, ...)` that shows a `toast.loading("Recompiling...", 0)` toast when recompiling starts and dismisses it when done
+
+### Behavior
+- All notifications appear as consistent pill badges at top-center of the main content area
+- "Recompiling..." appears as a toast (with spinner) instead of a sticky badge in the preview pane
+- Success/error/warning/info toasts all share the same visual style, differentiated only by icon and text color
+- Auto-dismiss still works (default 4s, configurable per toast)
+- Manual dismiss via close button or programmatic `dismiss(id)`
+
+### Files changed
+- `src/composables/useToast.ts`
+- `src/components/ToastContainer.vue`
+- `src/components/PreviewPane.vue`
+- `src/App.vue`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅

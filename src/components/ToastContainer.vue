@@ -6,51 +6,95 @@ const { toasts, removeToast } = useToast();
 function typeClasses(type: string) {
   switch (type) {
     case "success":
-      return "bg-emerald-600 text-white border-emerald-500";
+      return "text-green-600 dark:text-green-400";
     case "error":
-      return "bg-red-600 text-white border-red-500";
+      return "text-red-600 dark:text-red-400";
     case "warning":
-      return "bg-amber-500 text-white border-amber-400";
+      return "text-amber-600 dark:text-amber-400";
     case "info":
+    case "loading":
     default:
-      return "bg-slate-700 text-white border-slate-600";
+      return "text-muted-foreground";
   }
 }
 
-function iconFor(type: string) {
-  switch (type) {
-    case "success":
-      return "✓";
-    case "error":
-      return "✕";
-    case "warning":
-      return "!";
-    case "info":
-    default:
-      return "ℹ";
-  }
+function isSpinning(type: string) {
+  return type === "info" || type === "loading";
 }
 </script>
 
 <template>
-  <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+  <div class="flex flex-col items-center gap-2 pointer-events-none w-56">
     <TransitionGroup name="toast">
       <div
         v-for="toast in toasts"
         :key="toast.id"
-        class="pointer-events-auto flex items-center gap-2.5 px-4 py-2.5 rounded-lg border shadow-lg text-sm font-medium min-w-[16rem] max-w-[24rem]"
+        class="w-full pointer-events-auto flex items-center gap-2 bg-card/90 backdrop-blur-sm border rounded-full px-3 py-1.5 text-xs shadow-sm"
         :class="typeClasses(toast.type)"
         role="alert"
       >
-        <span class="flex items-center justify-center w-5 h-5 rounded-full bg-white/20 text-xs font-bold shrink-0">
-          {{ iconFor(toast.type) }}
-        </span>
-        <span class="flex-1">{{ toast.message }}</span>
+        <!-- Spinner for info/loading -->
+        <svg
+          v-if="isSpinning(toast.type)"
+          class="w-3 h-3 animate-spin shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+        </svg>
+
+        <!-- Static icon for success -->
+        <svg
+          v-else-if="toast.type === 'success'"
+          class="w-3 h-3 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M20 6L9 17l-5-5" />
+        </svg>
+
+        <!-- Static icon for warning -->
+        <svg
+          v-else-if="toast.type === 'warning'"
+          class="w-3 h-3 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+          <line x1="12" y1="9" x2="12" y2="13" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+
+        <!-- Static icon for error -->
+        <svg
+          v-else-if="toast.type === 'error'"
+          class="w-3 h-3 shrink-0"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+        >
+          <circle cx="12" cy="12" r="10" />
+          <line x1="15" y1="9" x2="9" y2="15" />
+          <line x1="9" y1="9" x2="15" y2="15" />
+        </svg>
+
+        <span>{{ toast.message }}</span>
+
         <button
-          class="opacity-70 hover:opacity-100 transition-opacity"
+          class="ml-0.5 p-0.5 rounded-full hover:bg-muted/50 transition-colors shrink-0"
           @click="removeToast(toast.id)"
         >
-          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </div>
     </TransitionGroup>
@@ -60,14 +104,14 @@ function iconFor(type: string) {
 <style scoped>
 .toast-enter-active,
 .toast-leave-active {
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
 }
 .toast-enter-from {
   opacity: 0;
-  transform: translateX(1rem);
+  transform: translateY(-8px);
 }
 .toast-leave-to {
   opacity: 0;
-  transform: translateX(1rem);
+  transform: translateY(-8px);
 }
 </style>

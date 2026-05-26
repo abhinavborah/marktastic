@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { open as openInShell } from "@tauri-apps/plugin-shell";
@@ -19,7 +19,6 @@ import WelcomeScreen from "./components/WelcomeScreen.vue";
 import SplitView from "./components/SplitView.vue";
 import EditorPane from "./components/EditorPane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
-import ToastContainer from "./components/ToastContainer.vue";
 
 // ─── State ───
 const editorContent = ref("");
@@ -53,10 +52,21 @@ const { pdfBytes, pdfLoading, lastError } = usePdf(
 const visiblePageNumbers = ref(new Set<number>([0, 1, 2]));
 
 // ─── PDF Image Renderer ───
-const { pages, totalPages, rendering: imageRendering, renderError } = usePdfRenderer(
+const { pages, totalPages, rendering: imageRendering, renderError, isRecompiling } = usePdfRenderer(
   pdfBytes,
   visiblePageNumbers
 );
+
+// Show "Recompiling..." toast while PDF is recompiling
+const recompileToastId = ref<number | null>(null);
+watch(isRecompiling, (val) => {
+  if (val) {
+    recompileToastId.value = toast.loading("Recompiling...", 0);
+  } else if (recompileToastId.value !== null) {
+    toast.dismiss(recompileToastId.value);
+    recompileToastId.value = null;
+  }
+});
 
 const previewLoading = computed(() => pdfLoading.value || imageRendering.value);
 const previewError = computed(() => lastError.value || renderError.value);
@@ -324,8 +334,7 @@ async function handleExportPdf() {
       </SplitView>
     </main>
 
-    <!-- Toast notifications -->
-    <ToastContainer />
+    <!-- Toast notifications removed from here — now inside <main> -->
   </div>
 </template>
 

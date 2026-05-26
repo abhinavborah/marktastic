@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick, onUnmounted } from "vue";
+import ToastContainer from "./ToastContainer.vue";
 
 const props = defineProps<{
   pages: (string | null)[];
@@ -153,6 +154,11 @@ const displayScale = computed(() => props.zoom / 2.0);
           <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
         </svg>
         <span>Loading pages...</span>
+      </div>
+
+      <!-- Toast notifications inside preview area only -->
+      <div class="absolute top-2 left-0 right-0 z-30 flex justify-center pointer-events-none">
+        <ToastContainer class="pointer-events-auto" />
       </div>
 
       <div
