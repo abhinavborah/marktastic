@@ -869,8 +869,8 @@ Awaiting user validation.
 
 ## P0 Performance Fixes
 
-| Fix | Status | Notes |
-|-----|--------|-------|
-| P0-1: v-html → img data URLs | ✅ committed (48af1aa) | Stops SVG parsing from blocking CM6 |
-| P0-2: requestIdleCallback yield | ✅ committed (48af1aa) | Stop DOM injection from blocking |
-| P0-3: Debounce verification + dedupe | ⬜ pending | Fix invalid Vue watch debounce |
+| Fix | Status | Commit |
+|-----|--------|--------|
+| P0-1: v-html → img data URLs | ✅ committed | `48af1aa` |
+| P0-2: requestIdleCallback yield | ✅ committed | `48af1aa` |
+| P0-3: Debounce verification + dedupe | ✅ committed | `81c5413` |

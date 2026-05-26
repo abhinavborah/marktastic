@@ -83,8 +83,8 @@ Before starting work, read:
 - `context7` — for Tauri v2 and Typst crate documentation lookups
 
 ## Next Actions (Phase 6)
-**Current state:** P0 Fixes 1 & 2 committed (48af1aa). P0 Fix 3 (debounce) remaining.
-**Next agent action:** Implement P0 Fix 3 (debounce verification + dedupe in useSvgRenderer).
+**Current state:** All P0 fixes committed. P0 Fixes 1 & 2 in 48af1aa, P0 Fix 3 in 81c5413.
+**Next agent action:** Validate with user, then move to Phase 6 (build/CI).
 
 1. Cross-platform build configuration (`tauri.conf.json` bundle settings for macOS, Windows, Linux)
 2. GitHub Actions CI workflow for automated builds on push/tag
@@ -113,13 +113,22 @@ Implemented to fix app freezing when typing in the editor.
 
 ---
 
-## Remaining P0 Fixes (Not Yet Implemented)
+### P0 Fix 3: ✅ committed (81c5413)
+**Problem:** `{ debounce: 500 }` in `watch()` is invalid Vue API — Vue has no built-in watch debounce option. Also, no dedupe meant redundant compiles.
+**Solution:**
+- Kept existing `setTimeout`/`clearTimeout` debounce pattern (already correct)
+- Added content dedupe: `lastRenderedContent` + `lastRenderedTemplate` tracking to skip recompile of identical documents
 
-### P0 Fix 3: Debounce verification + dedupe in useSvgRenderer
-**Problem:** Vue `watch` doesn't have a built-in debounce option. The `{ debounce: 500 }` option in `watch()` is invalid Vue API — compilation may not be properly debounced.
-**Solution:** Implement manual debounce with `setTimeout`/`clearTimeout`. Also add dedupe to prevent recompile of identical documents.
-**Files likely to change:** `src/composables/useSvgRenderer.ts`, `src/components/EditorPane.vue`
-**Test:** Type in editor → preview updates after ~300ms of inactivity, not instantly.
+**Files changed:** `src/composables/useSvgRenderer.ts`
+**Commit:** `81c5413`
+
+## All P0 Fixes Complete
+
+| Fix | Status | Commit |
+|-----|--------|--------|
+| P0-1: v-html → img data URLs | ✅ committed | `48af1aa` |
+| P0-2: requestIdleCallback yield | ✅ committed | `48af1aa` |
+| P0-3: Debounce verification + dedupe | ✅ committed | `81c5413` |
 
 ---
 
