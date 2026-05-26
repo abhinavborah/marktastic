@@ -119,7 +119,42 @@ async fn compile_folder_to_pdf(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
-/// Resolve wikilinks in a folder and return the ordered list of reachable file names.
+fn compile_to_svg(world: &mut TypstWrapperWorld, source: &str) -> Result<Vec<String>, String> {
+    world.update_source(source.to_string());
+
+    let document: typst::layout::PagedDocument = typst::compile(world)
+        .output
+        .map_err(|diags| {
+            let messages: Vec<String> = diags.iter().map(|d| format!("{:?}", d)).collect();
+            format!("Typst compilation failed: {}", messages.join("; "))
+        })?;
+
+    let mut pages = Vec::new();
+    for page in document.pages.iter() {
+        let svg = typst_svg::svg(page);
+        pages.push(svg);
+    }
+
+    Ok(pages)
+}
+
+/// Compile markdown to SVG pages using a built-in template.
+#[tauri::command]
+async fn convert_md_to_svg(
+    state: tauri::State<'_, AppState>,
+    markdown: String,
+    template_name: String,
+) -> Result<Vec<String>, String> {
+    let world_arc = state.world.clone();
+    tokio::task::spawn_blocking(move || {
+        let typst_body = md_to_typst::convert_md_to_typst(&markdown);
+        let full_source = build_full_source(&typst_body, &template_name)?;
+        let mut world = world_arc.lock().map_err(|e| format!("World lock error: {}", e))?;
+        compile_to_svg(&mut world, &full_source)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
+}
 #[tauri::command]
 async fn resolve_wikilinks(folder_path: String) -> Result<Vec<String>, String> {
     tokio::task::spawn_blocking(move || {
@@ -277,6 +312,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             convert_md_to_pdf,
             compile_folder_to_pdf,
+            convert_md_to_svg,
             resolve_wikilinks,
             open_file_path,
             open_folder,

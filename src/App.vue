@@ -9,7 +9,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import { useTheme } from "./composables/useTheme";
 import { usePdf } from "./composables/usePdf";
-import { usePdfRenderer } from "./composables/usePdfRenderer";
+import { useSvgRenderer } from "./composables/useSvgRenderer";
 import { useToast } from "./composables/useToast";
 import { useKeyboard } from "./composables/useKeyboard";
 import type { PaneMode } from "./composables/useKeyboard";
@@ -49,15 +49,13 @@ const { pdfBytes, pdfLoading, lastError } = usePdf(
   toast
 );
 
-const visiblePageNumbers = ref(new Set<number>([0, 1, 2]));
-
-// ─── PDF Image Renderer ───
-const { pages, totalPages, rendering: imageRendering, renderError, isRecompiling } = usePdfRenderer(
-  pdfBytes,
-  visiblePageNumbers
+// ─── SVG Preview Renderer ───
+const { pages, totalPages, rendering: svgRendering, renderError, isRecompiling } = useSvgRenderer(
+  editorContent,
+  selectedTemplate
 );
 
-// Show "Recompiling..." toast while PDF is recompiling
+// Show "Recompiling..." toast while SVG is recompiling
 const recompileToastId = ref<number | null>(null);
 watch(isRecompiling, (val) => {
   if (val) {
@@ -68,7 +66,7 @@ watch(isRecompiling, (val) => {
   }
 });
 
-const previewLoading = computed(() => pdfLoading.value || imageRendering.value);
+const previewLoading = computed(() => pdfLoading.value || svgRendering.value);
 const previewError = computed(() => lastError.value || renderError.value);
 
 // ─── Keyboard Shortcuts ───
@@ -328,7 +326,6 @@ async function handleExportPdf() {
             :rendering="previewLoading"
             :error="previewError"
             :zoom="zoomLevel"
-            @update:visible-pages="visiblePageNumbers = $event"
           />
         </template>
       </SplitView>

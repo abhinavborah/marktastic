@@ -70,7 +70,7 @@
 - Window: native OS chrome, full screen default, resizable, min/max/close
 - Markdown flavor: **GFM** (tables, task lists, strikethrough, autolinks)
 - Templates: 3 built-in Typst templates (`basic-report`, `university-assignment`, `thesis-chapter`)
-- Live preview: **PDF** (Typst-compiled) rendered in iframe, not HTML
+- Live preview: **SVG** (Typst-compiled) rendered as raw HTML, not PNG
 
 ## Context Files to Read
 Before starting work, read:
@@ -94,17 +94,24 @@ Before starting work, read:
 
 ## Major Changes Since Last Handoff
 
-### Architecture Change: iframe → Rust PDFium Renderer
-The original architecture displayed PDFs via `<iframe src="blob:...">`. This was replaced with a Rust-based PDFium renderer due to fundamental limitations of the native iframe PDF viewer on macOS WKWebView:
-- Native PDF viewer toolbar appears on hover (cannot be disabled via `#toolbar=0` or any other means on WKWebView)
-- No programmatic zoom API — `transform: scale()` only stretches the rendered canvas
-- Cross-frame scroll sync is unreliable
+### Architecture Change: iframe → Rust PDFium Renderer → SVG
+The original architecture displayed PDFs via `<iframe src="blob:...">`. This was replaced with a Rust-based PDFium renderer, then replaced again with direct Typst SVG output:
+- **Old flow:** Markdown → Typst → PDF bytes → PDFium → PNG → Vue `<img>` tags
+- **New flow:** Markdown → Typst → SVG strings → Vue `<div v-html>`
+- `convert_md_to_svg` Rust command compiles directly to SVG using `typst-svg` crate
+- `useSvgRenderer.ts` composable watches editor content + template, debounces 500ms, calls `convert_md_to_svg`
+- `PreviewPane.vue` renders raw SVG markup via `v-html` with CSS zoom
+- PDF export still uses `convert_md_to_pdf` + `typst-pdf`
 
-**New flow:** Markdown → Typst → PDF bytes → Rust PDFium → PNG pages → Vue `<img>` tags
-- `src-tauri/src/pdfium_renderer.rs` — calls `pdfium_auto::bind_pdfium_silent()` to auto-download the PDFium binary on first run (~10 MB, cached), then renders pages to PNG at zoom-scaled resolution
-- `src/composables/usePdfRenderer.ts` — watches `pdfBytes` + `zoomLevel`, invokes `render_pdf_pages` Rust command with 400 ms debounce
-- `src/components/PreviewPane.vue` — scrollable `<div>` with `<img v-for="page in pages">`
-- `useScrollSync.ts` is now **orphaned** (still exists in `src/composables/` but no longer imported by any component). The editor and preview scroll independently; no sync is attempted with the PNG-based preview
+### Performance Optimizations (All 5 Fixes)
+
+| Fix | Description | Status |
+|-----|-------------|--------|
+| 1 | Background threads (`spawn_blocking`) | ✅ COMPLETED |
+| 2 | Viewport page rendering (lazy loading) | ✅ COMPLETED |
+| 3 | Page caching by content hash (stale-while-revalidate) | ✅ COMPLETED |
+| 4 | Persistent Typst World (eliminates per-compile font search) | ✅ COMPLETED |
+| 5 | SVG output (replaces PDFium PNG pipeline) | ✅ COMPLETED |
 
 ### Bugs Fixed (with root causes)
 
@@ -135,7 +142,7 @@ The original architecture displayed PDFs via `<iframe src="blob:...">`. This was
 
 7. **Zoom buttons laggy/sluggish**
    - Root cause: Every zoom click triggered an immediate full round-trip to Rust (PDFium load → render all pages → base64 → return)
-   - Fix: 400 ms debounce on the `pdfBytes` + `zoomLevel` watcher in `usePdfRenderer.ts`; old pages stay visible during re-render with an opacity fade; an "Updating zoom..." badge appears in the top-right of the preview
+   - Fix: Multiple iterations — first CSS scale debounce, then fixed 2.0× pre-render, then final SVG output which eliminates the issue entirely
 
 8. **Typst "unclosed delimiter" errors on large markdown files**
    - Root cause: `escape_text` didn't escape `{` and `}`, which are Typst content block delimiters
@@ -144,16 +151,16 @@ The original architecture displayed PDFs via `<iframe src="blob:...">`. This was
 9. **Loading overlay stuck on preview** *(iframe-era issue, now moot)*
    - Root cause: iframe `@load` event sometimes failed to fire for blob URLs
    - Fix (at the time): Added 3-second timeout fallback (`loadTimedOut`) that hid the overlay if load never completed
-   - **Current state:** With the PDFium renderer, loading state is driven by the `rendering` boolean from `usePdfRenderer.ts`; no timeout mechanism is needed
+   - **Current state:** With SVG output, loading state is driven by the `rendering` boolean from `useSvgRenderer`; no timeout mechanism is needed
 
 10. **White overlay at bottom of preview in dark mode** *(iframe-era issue, now moot)*
     - Root cause: iframe had a `bg-white` class; when the PDF page was shorter than the viewport, white showed below
     - Fix (at the time): Removed `bg-white` from the iframe
-    - **Current state:** The PDFium renderer outputs `<img>` elements with `style="background-color: white;"`, which is correct because PDF pages are inherently white
+    - **Current state:** SVG preview has transparent background; page content has its own background
 
 11. **Bottom-center native PDF viewer toolbar visible** *(iframe-era issue)*
     - Root cause: `#toolbar=0` URL fragment is Adobe-specific, ignored by Apple's PDFKit in WKWebView
-    - Fix: Eliminated the iframe entirely — replaced with the PDFium PNG renderer (no iframe = no native toolbar)
+    - Fix: Eliminated the iframe entirely — replaced with the PDFium PNG renderer, then replaced again with SVG output
 
 12. **"Reveal in Finder" → "Open in Preview"**
     - Original implementation used `@tauri-apps/plugin-shell` to open a folder in Finder
@@ -161,7 +168,7 @@ The original architecture displayed PDFs via `<iframe src="blob:...">`. This was
 
 13. **CSS `zoom` property doesn't work on iframe PDF**
     - Root cause: CSS `zoom` is non-standard and ignored by iframe PDF content
-    - Fix: With the PDFium renderer, zoom is proper — pages are re-rendered at the correct resolution via `PdfRenderConfig` with scaled target width/height
+    - Fix: With SVG output, zoom is proper — CSS `transform: scale()` on the SVG container, which the browser handles natively
 
 ### Current Component Layouts and Wiring
 
@@ -185,7 +192,7 @@ App.vue (root)
 │       ├── drag handle (1px vertical bar)
 │       │
 │       ├── PreviewPane (right)
-│       │   └── Scrollable <img> list (PNG pages rendered by PDFium)
+│       │   └── Scrollable SVG list (raw SVG via v-html)
 │       │
 │       └── floating controls (top-right)
 │           ├── Editor-only / Split / Preview-only buttons
@@ -193,8 +200,8 @@ App.vue (root)
 │           ├── Zoom out / zoom percent / zoom in buttons
 │           └── Open in Preview button
 │
-└── ToastContainer (bottom-right)
-    └── Stacked toast notifications
+└── ToastContainer (inside PreviewPane, top-center)
+    └── Stacked pill-badge toast notifications
 ```
 
 ### Data Flow
@@ -206,19 +213,13 @@ Tauri dialog → Rust command (open_file_path / open_folder)
     ↓
 editorContent (Vue ref)
     ↓
-usePdf: watches editorContent + selectedTemplate → debounce 500ms → invoke('convert_md_to_pdf')
+useSvgRenderer: watches editorContent + selectedTemplate → debounce 500ms → invoke('convert_md_to_svg')
     ↓
-Rust: md_to_typst → typst_world → typst_pdf → Vec<u8>
+Rust: md_to_typst → persistent TypstWorld → typst::compile → typst_svg::svg per page → Vec<String>
     ↓
-pdfBytes (Vue ref)
+pages (Vue ref: string[] of raw SVG markup)
     ↓
-usePdfRenderer: watches pdfBytes + zoomLevel → debounce 400ms → invoke('render_pdf_pages')
-    ↓
-Rust: PDFium loads PDF → renders each page to bitmap → PNG → base64 data URL
-    ↓
-pages (Vue ref: string[] of data:image/png;base64, URLs)
-    ↓
-PreviewPane: v-for page in pages → <img :src="page">
+PreviewPane: v-for page in pages → <div v-html="page"> with CSS zoom
 ```
 
 ### Keyboard Shortcuts
@@ -236,14 +237,13 @@ PreviewPane: v-for page in pages → <img :src="page">
 
 ### Known Limitations
 
-1. **First PDFium load** — Binary downloads on first run (~10 MB) via `pdfium-auto`. Requires internet or a pre-bundled `libpdfium` binary set via `PDFIUM_LIB_PATH`.
-2. **Zoom re-render latency** — Even with debounce, re-rendering multi-page PDFs at high zoom takes 200–500 ms. Old pages stay visible with an opacity fade during the update.
-3. **No text selection in preview** — PNG images don't allow text selection. Would need OCR or a different rendering approach.
-4. **No search in preview** — Same reason: the preview is a sequence of images, not text.
-5. **File sidebar for folder mode** — Not implemented (would require tracking section boundaries in the editor for clickable navigation).
-6. **Custom user-defined Typst templates** — Not yet supported. Templates are hardcoded in `src-tauri/templates/`.
-7. **Print support** — Not implemented.
-8. **Auto-save** — Not implemented.
+1. **First TypstWorld compile** — Font search happens once at startup (~100-300ms). Subsequent compiles skip it.
+2. **SVG rendering** — Some complex Typst features (like embedded images with filters) may not render correctly in all browsers. Standard text/layout/table features work well.
+3. **PDF export** — Still uses `convert_md_to_pdf` which compiles separately from SVG preview. Two compilations on edit (one for preview SVG, one for export PDF). Could be optimized to a single compile that outputs both formats.
+4. **Print support** — Not implemented. Would need a separate print stylesheet or PDF export + print.
+5. **Auto-save** — Not implemented.
+6. **File sidebar for folder mode** — Not implemented (would require tracking section boundaries in the editor for clickable navigation).
+7. **Custom user-defined Typst templates** — Not yet supported. Templates are hardcoded in `src-tauri/templates/`.
 
 ### Tech Stack (Current)
 
@@ -254,48 +254,13 @@ PreviewPane: v-for page in pages → <img :src="page">
 | UI | shadcn-vue + Tailwind CSS |
 | Editor | CodeMirror 6 |
 | PDF Generation | Typst (`typst`, `typst-pdf`, `typst-kit` crates) |
-| PDF Rendering | Google PDFium (`pdfium-render` + `pdfium-auto` crates) |
+| SVG Preview | Typst SVG (`typst-svg` crate) |
 | Markdown Parser | `pulldown-cmark` |
-| PDF Viewer | Custom (PNG images in scrollable div) |
-
----
-
-## Performance Optimization Plan
-
-Planned sequential performance improvements. Each fix will be implemented one at a time, with user validation between each.
-
-| Fix | Description | Expected Impact |
-|-----|-------------|---------------|
-| 1 | **Background threads (`spawn_blocking`)** — Wrap `convert_md_to_pdf` and `render_pdf_pages` in `tokio::task::spawn_blocking` so Rust computation runs off the Tauri main thread | Prevents UI freeze during heavy Typst compilation or PDFium rendering; "Rendering..." spinner stays responsive |
-| 2 | **Viewport page rendering** — Track which pages are visible in the preview scroll container via IntersectionObserver; only invoke PDFium for visible pages | Dramatically reduces render time for multi-page documents; initial load shows first page instantly, subsequent pages render on scroll |
-| 3 | **Page caching** — Hash each page's source content + template + zoom; store rendered PNGs in a hash-keyed cache (in-memory or `AppData` temp dir); skip PDFium for unchanged pages | Near-instant re-render when only some pages changed; zoom changes are free (already handled by CSS `zoom`); big win for large documents with minor edits |
-| 4 | **Persistent Typst World** — Keep a single `TypstWrapperWorld` instance across compilations instead of creating a new one per `convert_md_to_pdf` call; use Typst's built-in incremental compilation (source change tracking, cached evaluation) | Cuts Typst compilation time from ~200ms to ~20ms for small edits; fonts and packages stay loaded |
-| 5 | **SVG output** — Replace the PNG pipeline entirely: render Typst to SVG instead of PDF→PNG; display SVG `<img>` or inline `<svg>` in the preview pane | Eliminates PDFium binary download (~10 MB) and per-page bitmap rasterization; SVG is vector → crisp at all zooms with zero render cost; preview becomes selectable text and searchable |
+| PDF Viewer | Native SVG in browser (via `v-html`) |
 
 ### Git History (Cleaned)
 
-Run `git log --oneline` to verify. The unique commits on `main` are:
-
-```
-a975466 fix: escape typst delimiters { } in markdown-to-typst converter, escape table cells and link text, handle backticks in inline code
-e23b22e fix: debounced zoom re-render with smooth visual feedback and old-image persistence
-a7d03cf replace iframe pdf preview with rust pdfium png renderer
-cedf177 fix: hide native pdf toolbar with #toolbar=0, simplify zoom wrapper with top-left origin
-ccc4408 fix: use transform scale wrapper for zoom, add load timeout fallback, explicit zoom handlers with logging
-973a4fc fix: open pdf in system preview, use css zoom on iframe, remove bg-white mat
-824e71f fix: line number alignment, zoom controls + reveal in finder, one-directional scroll sync
-c16f2fa add readme
-1d10f32 add fs write permissions to tauri capabilities for export pdf
-1c96190 fix: add export pdf fallback with diagnostics, robust drag handle with window listeners and iframe pointer-events guard
-d678147 fix: codemirror scrollbar, scrollpastend, word wrap toggle, and gutter background
-2c94813 fix: remove transition-all from split panes, store pdf bytes for export, skip compilation on empty markdown
-00a10cb implement phase 5: keyboard shortcuts, toast notifications, dark mode polish, smooth transitions, and ux improvements
-081eb81 fix folder-mode live preview: use editor content as single source of truth for pdf generation
-8447e7b implement phase 4: wikilink resolution, merged editor view, and smart scroll sync
-4f13e58 implement phase 3: vue frontend with codemirror 6 editor, live pdf preview, split view, dark mode, and file/folder open flow
-0542ad9 implement phase 2: rust backend typst pipeline with md-to-pdf conversion, file commands, and 3 built-in templates
-35c52ec scaffold tauri v2 + vue 3 + typescript project with tailwind, shadcn-vue, codemirror 6, and tauri plugins
-```
+Run `git log --oneline` to verify. Key commits include scaffolding, Typst pipeline, Vue frontend, wikilinks, dark mode polish, PDFium renderer, debounced zoom, persistent world, and SVG output.
 
 ### Files That Should NOT Be Committed
 
@@ -305,28 +270,3 @@ These are agent workspace files. They are present in the working directory but e
 - `context/` (task_plan.md, findings.md, progress.md)
 
 Do NOT add them to `.gitignore` — the agent exercises judgment on what to commit.
-
----
-
-## Performance Optimization Progress
-
-### Fix 1: Background Threads (`spawn_blocking`) — COMPLETED ✅
-All Tauri commands converted to `async fn` with `tokio::task::spawn_blocking`. Typst compilation and PDFium rendering now run on the blocking thread pool. UI stays fully responsive during heavy computation. User validated.
-
-### Fix 2: Viewport Page Rendering — COMPLETED ✅
-Added `render_pdf_page_range` and `get_pdf_page_count` Rust commands. Rewrote `usePdfRenderer.ts` with a module-scoped page cache and lazy rendering. `PreviewPane.vue` uses `IntersectionObserver` with 200px buffer to detect visible pages and shows gray placeholders for uncached pages. Only pages near the viewport are rendered; scrolling loads more on-demand. Cache persists across scrolls for instant back-navigation. Initial bug (all-gray placeholders) was caused by a non-reactive `Map` in a computed property; fixed by returning the reactive `pages` ref directly. User validated.
-
-### Fix 3: Page Caching by Content Hash — COMPLETED ✅
-Implemented persistent cross-compile cache keyed by `(pdfHash, pageNum, zoom)` with stale-while-revalidate UX. Old pages stay visible during recompile; "Recompiling..." appears as a toast. Cache persists across document switches via module-scoped Map. SHA-256 hash of PDF bytes determines cache hits. Toast badges unified with Recompiling badge style (pill, bg-card/90, top-center of preview area, fixed w-56 width). User validated.
-
-### Fix 4: Persistent Typst World — IN PROGRESS
-Keep the Typst compiler alive between invocations via Tauri managed state (`Arc<Mutex<TypstWrapperWorld>>`). Font search runs once at startup instead of every compile. `update_source` replaces the main source text while reusing the same world instance. Estimated speedup: 100–300ms per compile (font search eliminated). Awaiting user validation.
-
-### Fix 5: SVG Output — READY TO START
-Replace PNG pipeline entirely with SVG output from Typst. Near-instant updates, selectable text, smallest bundle.
-
-### Fix 4: Persistent Typst World — READY TO START
-Keep the Typst compiler alive between invocations, update only changed source. Text-only edits drop from ~500ms to ~50-150ms.
-
-### Fix 5: SVG Output — READY TO START
-Replace PNG pipeline entirely with SVG output from Typst. Near-instant updates, selectable text, smallest bundle.

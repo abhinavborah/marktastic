@@ -2935,6 +2935,7 @@ dependencies = [
  "typst",
  "typst-kit",
  "typst-pdf",
+ "typst-svg",
  "ureq",
  "zune-inflate",
 ]
