@@ -89,6 +89,12 @@ impl TypstWrapperWorld {
         }
     }
 
+    /// Update the main source text. Reuses the same detached FileId so Typst
+    /// can potentially reuse internal caches.
+    pub fn update_source(&mut self, text: String) {
+        self.source = Source::detached(text);
+    }
+
     /// Helper to handle file requests.
     fn file(&self, id: FileId) -> FileResult<FileEntry> {
         let mut files = self.files.lock().map_err(|_| FileError::AccessDenied)?;

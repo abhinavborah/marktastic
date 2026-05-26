@@ -570,8 +570,8 @@ Planned sequential performance improvements. Each fix will be implemented one at
 |-----|-------------|--------|
 | 1 | Background threads (`spawn_blocking`) — moves Rust computation off main thread | `completed` |
 | 2 | Viewport page rendering — only render visible pages | `completed` |
-| 3 | Page caching — hash-based cache for unchanged pages | `in_progress` |
-| 4 | Persistent Typst World — incremental compilation | `pending` |
+| 3 | Page caching — hash-based cache for unchanged pages | `completed` |
+| 4 | Persistent Typst World — incremental compilation | `in_progress` |
 | 5 | SVG output — replace PNG pipeline with SVG | `pending` |
 
 ## Fix 1: Background Threads (`spawn_blocking`) — 2026-05-26
@@ -752,3 +752,52 @@ Planned sequential performance improvements. Each fix will be implemented one at
 ### Compilation after fix
 - `npm run build` ✅
 - `cargo check` ✅
+
+### Status
+**Completed** — validated by user. Toast badges are now uniform pill style inside PreviewPane (visible only when preview is showing). All badges share fixed `w-56` width. Editor-only mode hides toasts since PreviewPane is unmounted. Recompiling toast appears via `watch(isRecompiling)` in App.vue and is dismissed when done.
+
+## Fix 4: Persistent Typst World — 2026-05-26
+
+### Issue: Typst world recreated on every compile
+**Root cause:** `compile_markdown_to_pdf` created a fresh `TypstWrapperWorld` on every invocation via `TypstWrapperWorld::new(root, full_source)`. This triggered an expensive system font search (`FontSearcher::new().include_system_fonts(true).search()`) on every keystroke — 100–300ms just for font discovery, before any actual compilation.  
+**Fix:**
+1. **Added persistent world to Tauri state in `lib.rs`:**
+   - Created `AppState { world: Arc<Mutex<TypstWrapperWorld>> }`
+   - Initialized once at app startup in `run()` with empty source text
+   - The same world instance is reused across all compilations
+
+2. **Added `update_source(&mut self, text: String)` to `TypstWrapperWorld`:**
+   - Replaces `self.source` with `Source::detached(text)`
+   - Uses the same detached `FileId` so Typst recognizes it as the same file
+
+3. **Refactored `lib.rs` compilation pipeline:**
+   - Extracted `build_full_source(typst_body, template_name)` — template resolution + body injection
+   - Extracted `compile_with_world(world, source)` — locks world, updates source, compiles, returns PDF bytes
+   - `convert_md_to_pdf` and `compile_folder_to_pdf` now clone the `Arc<Mutex<World>>`, lock it in `spawn_blocking`, and compile
+
+4. **Font search is now done once at startup**
+   - `FontSearcher::search()` runs once when the world is created
+   - Subsequent compilations skip font discovery entirely
+
+### Technical notes
+- `Arc<Mutex<World>>` is passed to `spawn_blocking` by cloning the `Arc`
+- The lock is held for the entire compilation, serializing concurrent compile requests
+- `Source::detached(new_text)` creates a new source with the same `FileId` (the detached ID). Typst's internal span-based memoization may be partially invalidated because AST spans are regenerated, but font loading overhead is eliminated entirely.
+- If `FontSlot` were not `Send`, this approach would fail at compile time. It compiled successfully, confirming `FontSlot` is `Send`.
+
+### Behavior
+- First compile after app startup: font search + compilation (same as before)
+- Subsequent compiles: skip font search → faster by 100–300ms
+- The world persists until app restart
+- Template switches still work (template is resolved per-compile, only the world is reused)
+
+### Files changed
+- `src-tauri/src/lib.rs`
+- `src-tauri/src/typst_world.rs`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅
+
+### Status
+Awaiting user validation.

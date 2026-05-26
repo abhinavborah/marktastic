@@ -316,8 +316,14 @@ All Tauri commands converted to `async fn` with `tokio::task::spawn_blocking`. T
 ### Fix 2: Viewport Page Rendering — COMPLETED ✅
 Added `render_pdf_page_range` and `get_pdf_page_count` Rust commands. Rewrote `usePdfRenderer.ts` with a module-scoped page cache and lazy rendering. `PreviewPane.vue` uses `IntersectionObserver` with 200px buffer to detect visible pages and shows gray placeholders for uncached pages. Only pages near the viewport are rendered; scrolling loads more on-demand. Cache persists across scrolls for instant back-navigation. Initial bug (all-gray placeholders) was caused by a non-reactive `Map` in a computed property; fixed by returning the reactive `pages` ref directly. User validated.
 
-### Fix 3: Page Caching by Content Hash — IN PROGRESS
-Implemented persistent cross-compile cache keyed by `(pdfHash, pageNum, zoom)` with stale-while-revalidate UX. Old pages stay visible during recompile; a sticky "Recompiling..." badge indicates stale state. Cache persists across document switches via module-scoped Map. SHA-256 hash of PDF bytes determines cache hits. Awaiting user validation.
+### Fix 3: Page Caching by Content Hash — COMPLETED ✅
+Implemented persistent cross-compile cache keyed by `(pdfHash, pageNum, zoom)` with stale-while-revalidate UX. Old pages stay visible during recompile; "Recompiling..." appears as a toast. Cache persists across document switches via module-scoped Map. SHA-256 hash of PDF bytes determines cache hits. Toast badges unified with Recompiling badge style (pill, bg-card/90, top-center of preview area, fixed w-56 width). User validated.
+
+### Fix 4: Persistent Typst World — IN PROGRESS
+Keep the Typst compiler alive between invocations via Tauri managed state (`Arc<Mutex<TypstWrapperWorld>>`). Font search runs once at startup instead of every compile. `update_source` replaces the main source text while reusing the same world instance. Estimated speedup: 100–300ms per compile (font search eliminated). Awaiting user validation.
+
+### Fix 5: SVG Output — READY TO START
+Replace PNG pipeline entirely with SVG output from Typst. Near-instant updates, selectable text, smallest bundle.
 
 ### Fix 4: Persistent Typst World — READY TO START
 Keep the Typst compiler alive between invocations, update only changed source. Text-only edits drop from ~500ms to ~50-150ms.
