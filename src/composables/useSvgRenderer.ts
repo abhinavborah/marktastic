@@ -7,12 +7,24 @@ const rendering = ref(false);
 const renderError = ref<string | null>(null);
 const isRecompiling = ref(false);
 
+// Track last rendered content to skip recompile of identical documents
+let lastRenderedContent = "";
+let lastRenderedTemplate = "";
+
 export function useSvgRenderer(
   editorContentRef: Ref<string>,
   selectedTemplateRef: Ref<string>
 ) {
   async function render() {
-    if (!editorContentRef.value.trim()) {
+    const content = editorContentRef.value;
+    const template = selectedTemplateRef.value;
+
+    // Dedupe: skip if content and template unchanged since last render
+    if (content === lastRenderedContent && template === lastRenderedTemplate) {
+      return;
+    }
+
+    if (!content.trim()) {
       pages.value = [];
       totalPages.value = 0;
       isRecompiling.value = false;
@@ -26,8 +38,8 @@ export function useSvgRenderer(
 
     try {
       const result = await invoke<string[]>("convert_md_to_svg", {
-        markdown: editorContentRef.value,
-        templateName: selectedTemplateRef.value,
+        markdown: content,
+        templateName: template,
       });
 
       // Yield to browser so CodeMirror can process pending keystrokes
@@ -42,6 +54,8 @@ export function useSvgRenderer(
 
       pages.value = result;
       totalPages.value = result.length;
+      lastRenderedContent = content;
+      lastRenderedTemplate = template;
     } catch (err: any) {
       renderError.value = String(err);
       console.error("SVG rendering failed:", err);
@@ -51,7 +65,7 @@ export function useSvgRenderer(
     }
   }
 
-  // Debounced watch on editor content + template
+  // Debounced watch on editor content + template (manual debounce, not Vue API)
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   watch(
