@@ -559,3 +559,17 @@ Replaced the iframe-based PDF preview with a Rust PDFium renderer that converts 
 ### Compilation after fix
 - `npm run build` ✅
 - `cargo check` ✅
+
+---
+
+## Optimization Phase — 2026-05-26
+
+Planned sequential performance improvements. Each fix will be implemented one at a time, with user validation between each.
+
+| Fix | Description | Status |
+|-----|-------------|--------|
+| 1 | Background threads (`spawn_blocking`) — moves Rust computation off main thread | `pending` |
+| 2 | Viewport page rendering — only render visible pages | `pending` |
+| 3 | Page caching — hash-based cache for unchanged pages | `pending` |
+| 4 | Persistent Typst World — incremental compilation | `pending` |
+| 5 | SVG output — replace PNG pipeline with SVG | `pending` |
