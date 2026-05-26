@@ -83,8 +83,8 @@ Before starting work, read:
 - `context7` — for Tauri v2 and Typst crate documentation lookups
 
 ## Next Actions (Phase 6)
-**Current state:** P0 Fix 1 done (code, not committed). App should be less frozen but debounce may not be working correctly (invalid Vue API for watch debounce).
-**Next agent action:** Commit P0 Fix 1, then implement P0 Fix 2 (requestIdleCallback).
+**Current state:** P0 Fixes 1 & 2 committed (48af1aa). P0 Fix 3 (debounce) remaining.
+**Next agent action:** Implement P0 Fix 3 (debounce verification + dedupe in useSvgRenderer).
 
 1. Cross-platform build configuration (`tauri.conf.json` bundle settings for macOS, Windows, Linux)
 2. GitHub Actions CI workflow for automated builds on push/tag

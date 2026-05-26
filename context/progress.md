@@ -847,3 +847,30 @@ Awaiting user validation.
 
 ### Status
 Awaiting user validation.
+
+## P0 Fix 1: Replace v-html SVG with `<img>` Data URLs — 2026-05-26
+
+### Issue: App froze when typing due to main-thread SVG parsing
+**Root cause:** `v-html` in `PreviewPane.vue` parsed SVG XML into DOM nodes synchronously on the main JavaScript thread. This blocked CodeMirror 6 from processing keystrokes, making the editor feel frozen.  
+**Fix:** Replaced inline `v-html` injection with `<img>` tags using SVG data URLs. The browser's image renderer parses SVG off the main JavaScript thread, keeping the editor responsive.
+
+### Changes
+- `PreviewPane.vue`: changed from `<div v-html="page">` to `<img :src="svgToDataUrl(page)">`
+- Added `svgToDataUrl()` helper using minimal percent-encoding (faster than base64)
+- Kept CSS `zoom` property for scaling (scales both visual and layout box)
+
+### Files changed
+- `src/components/PreviewPane.vue`
+- `src/composables/useSvgRenderer.ts`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅
+
+## P0 Performance Fixes
+
+| Fix | Status | Notes |
+|-----|--------|-------|
+| P0-1: v-html → img data URLs | ✅ committed (48af1aa) | Stops SVG parsing from blocking CM6 |
+| P0-2: requestIdleCallback yield | ✅ committed (48af1aa) | Stop DOM injection from blocking |
+| P0-3: Debounce verification + dedupe | ⬜ pending | Fix invalid Vue watch debounce |
