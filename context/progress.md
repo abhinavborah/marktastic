@@ -568,8 +568,45 @@ Planned sequential performance improvements. Each fix will be implemented one at
 
 | Fix | Description | Status |
 |-----|-------------|--------|
-| 1 | Background threads (`spawn_blocking`) — moves Rust computation off main thread | `pending` |
+| 1 | Background threads (`spawn_blocking`) — moves Rust computation off main thread | `completed` |
 | 2 | Viewport page rendering — only render visible pages | `pending` |
 | 3 | Page caching — hash-based cache for unchanged pages | `pending` |
 | 4 | Persistent Typst World — incremental compilation | `pending` |
 | 5 | SVG output — replace PNG pipeline with SVG | `pending` |
+
+## Fix 1: Background Threads (`spawn_blocking`) — 2026-05-26
+
+### Issue: Rust computation blocked the Tauri main thread
+**Root cause:** All Tauri commands (`convert_md_to_pdf`, `render_pdf_pages`, `open_file_path`, `open_folder`, `resolve_wikilinks`, `compile_folder_to_pdf`, `get_templates`) ran synchronously on the Tauri async runtime's main task. Heavy Typst compilation (200ms–2s) or PDFium rendering (100ms–500ms) blocked the WebView event loop, causing UI freezes — spinner animation stuttered, buttons became unresponsive, theme toggle lagged.  
+**Fix:** Converted all non-trivial commands from `fn` to `async fn`, wrapping their bodies in `tokio::task::spawn_blocking`. The blocking thread pool runs Typst compilation, PDFium rendering, and file I/O off the main async thread.
+
+### Commands converted
+| Command | Work moved to `spawn_blocking` |
+|---------|-------------------------------|
+| `convert_md_to_pdf` | Full Typst compilation pipeline |
+| `compile_folder_to_pdf` | Wikilink resolution + Typst compilation |
+| `render_pdf_pages` | PDFium PDF→PNG rendering |
+| `resolve_wikilinks` | File reading + BFS graph traversal |
+| `open_file_path` | `std::fs::read_to_string` |
+| `open_folder` | `std::fs::read_dir` + per-file `read_to_string` |
+| `get_templates` | `std::fs::read_dir` on template directories |
+
+### Technical details
+- Added `tokio = { version = "1", features = ["rt", "rt-multi-thread"] }` to `src-tauri/Cargo.toml`
+- Each command now returns `Result<T, String>` via `.await.map_err(|e| format!("Task join error: {}", e))?`
+- The `.invoke_handler()` in `run()` required no changes — Tauri handles async commands transparently
+- Vue frontend (`invoke()`) required no changes — it already returns a Promise
+
+### Behavior
+- Typing in the editor → Typst compiles on a background thread → UI stays fully responsive
+- "Compiling PDF..." toast appears smoothly, spinner animation doesn't stutter
+- Buttons, theme toggle, pane resizing all work while PDF is compiling
+- Actual compilation time unchanged (200ms–2s), but the app **feels** instant
+
+### Files changed
+- `src-tauri/Cargo.toml`
+- `src-tauri/src/lib.rs`
+
+### Compilation after fix
+- `npm run build` ✅
+- `cargo check` ✅

@@ -13,22 +13,34 @@ const MARKER: &str = "// MARKTASTIC_BODY_CONTENT";
 
 /// Compile markdown to PDF using a built-in template.
 #[tauri::command]
-fn convert_md_to_pdf(markdown: String, template_name: String) -> Result<Vec<u8>, String> {
-    compile_markdown_to_pdf(&markdown, &template_name)
+async fn convert_md_to_pdf(markdown: String, template_name: String) -> Result<Vec<u8>, String> {
+    tokio::task::spawn_blocking(move || {
+        compile_markdown_to_pdf(&markdown, &template_name)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Compile a folder of linked markdown files to PDF.
 /// Resolves wikilinks, merges reachable files, and compiles to PDF.
 #[tauri::command]
-fn compile_folder_to_pdf(folder_path: String, template_name: String) -> Result<Vec<u8>, String> {
-    let (merged_markdown, _boundaries) = wikilinks::build_merged_document(&folder_path)?;
-    compile_markdown_to_pdf(&merged_markdown, &template_name)
+async fn compile_folder_to_pdf(folder_path: String, template_name: String) -> Result<Vec<u8>, String> {
+    tokio::task::spawn_blocking(move || {
+        let (merged_markdown, _boundaries) = wikilinks::build_merged_document(&folder_path)?;
+        compile_markdown_to_pdf(&merged_markdown, &template_name)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Resolve wikilinks in a folder and return the ordered list of reachable file names.
 #[tauri::command]
-fn resolve_wikilinks(folder_path: String) -> Result<Vec<String>, String> {
-    wikilinks::resolve_wikilinks(&folder_path)
+async fn resolve_wikilinks(folder_path: String) -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        wikilinks::resolve_wikilinks(&folder_path)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Shared PDF compilation logic.
@@ -102,86 +114,102 @@ fn compile_markdown_to_pdf(markdown: &str, template_name: &str) -> Result<Vec<u8
 }
 
 #[tauri::command]
-fn open_file_path(file_path: String) -> Result<String, String> {
-    std::fs::read_to_string(&file_path)
-        .map_err(|e| format!("Failed to read file '{}': {}", file_path, e))
+async fn open_file_path(file_path: String) -> Result<String, String> {
+    tokio::task::spawn_blocking(move || {
+        std::fs::read_to_string(&file_path)
+            .map_err(|e| format!("Failed to read file '{}': {}", file_path, e))
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
-fn open_folder(folder_path: String) -> Result<Vec<(String, String)>, String> {
-    let mut results = Vec::new();
-    let entries = std::fs::read_dir(&folder_path)
-        .map_err(|e| format!("Failed to read folder '{}': {}", folder_path, e))?;
+async fn open_folder(folder_path: String) -> Result<Vec<(String, String)>, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut results = Vec::new();
+        let entries = std::fs::read_dir(&folder_path)
+            .map_err(|e| format!("Failed to read folder '{}': {}", folder_path, e))?;
 
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
-        let path = entry.path();
-        if path.extension().map(|e| e == "md").unwrap_or(false) {
-            let file_name = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let content = std::fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read '{}': {}", path.display(), e))?;
-            results.push((file_name, content));
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read directory entry: {}", e))?;
+            let path = entry.path();
+            if path.extension().map(|e| e == "md").unwrap_or(false) {
+                let file_name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                let content = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("Failed to read '{}': {}", path.display(), e))?;
+                results.push((file_name, content));
+            }
         }
-    }
 
-    Ok(results)
+        Ok(results)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[tauri::command]
-fn get_templates() -> Result<Vec<String>, String> {
-    let exe_dir = std::env::current_exe()
-        .map_err(|e| format!("Failed to get executable path: {}", e))?
-        .parent()
-        .ok_or("Failed to get executable directory")?
-        .to_path_buf();
+async fn get_templates() -> Result<Vec<String>, String> {
+    tokio::task::spawn_blocking(move || {
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| format!("Failed to get executable path: {}", e))?
+            .parent()
+            .ok_or("Failed to get executable directory")?
+            .to_path_buf();
 
-    let template_dir_candidates = [
-        exe_dir.join(TEMPLATE_DIR),
-        exe_dir.join("../..").join(TEMPLATE_DIR),
-        PathBuf::from(format!("src-tauri/{}", TEMPLATE_DIR)),
-        PathBuf::from(TEMPLATE_DIR),
-    ];
+        let template_dir_candidates = [
+            exe_dir.join(TEMPLATE_DIR),
+            exe_dir.join("../..").join(TEMPLATE_DIR),
+            PathBuf::from(format!("src-tauri/{}", TEMPLATE_DIR)),
+            PathBuf::from(TEMPLATE_DIR),
+        ];
 
-    let mut templates = Vec::new();
-    for dir in &template_dir_candidates {
-        if let Ok(entries) = std::fs::read_dir(dir) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.extension().map(|e| e == "typ").unwrap_or(false) {
-                    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                        templates.push(stem.to_string());
+        let mut templates = Vec::new();
+        for dir in &template_dir_candidates {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.extension().map(|e| e == "typ").unwrap_or(false) {
+                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+                            templates.push(stem.to_string());
+                        }
                     }
                 }
-            }
-            if !templates.is_empty() {
-                break;
+                if !templates.is_empty() {
+                    break;
+                }
             }
         }
-    }
 
-    if templates.is_empty() {
-        // Fallback: return known templates
-        templates = vec![
-            "basic-report".to_string(),
-            "university-assignment".to_string(),
-            "thesis-chapter".to_string(),
-        ];
-    }
+        if templates.is_empty() {
+            // Fallback: return known templates
+            templates = vec![
+                "basic-report".to_string(),
+                "university-assignment".to_string(),
+                "thesis-chapter".to_string(),
+            ];
+        }
 
-    Ok(templates)
+        Ok(templates)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 /// Render PDF pages to PNG images using PDFium.
 #[tauri::command]
-fn render_pdf_pages(
+async fn render_pdf_pages(
     pdf_bytes: Vec<u8>,
     zoom: f64,
     device_pixel_ratio: f64,
 ) -> Result<Vec<String>, String> {
-    pdfium_renderer::render_pdf_pages(&pdf_bytes, zoom, device_pixel_ratio)
+    tokio::task::spawn_blocking(move || {
+        pdfium_renderer::render_pdf_pages(&pdf_bytes, zoom, device_pixel_ratio)
+    })
+    .await
+    .map_err(|e| format!("Task join error: {}", e))?
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
