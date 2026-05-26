@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick } from "vue";
+import { ref, computed, watch, onMounted, nextTick, onUnmounted } from "vue";
 
 const props = defineProps<{
   pages: (string | null)[];
@@ -14,83 +14,93 @@ const emit = defineEmits<{
 }>();
 
 const scrollerRef = ref<HTMLDivElement | null>(null);
-const pageRefs = ref<HTMLDivElement[]>([]);
 
-// Estimated height per page before images load (will be refined by IntersectionObserver)
-const PAGE_ESTIMATED_HEIGHT = 600;
+// Use a Map for stable ref tracking across re-renders
+const pageElements = new Map<number, HTMLElement>();
 
-function updateVisiblePages() {
-  if (!scrollerRef.value || props.totalPages === 0) return;
-
-  const container = scrollerRef.value;
-  const containerRect = container.getBoundingClientRect();
-  const scrollTop = container.scrollTop;
-  const containerHeight = containerRect.height;
-  const buffer = 1; // render 1 page above and below viewport
-
-  const firstVisible = Math.max(0, Math.floor(scrollTop / PAGE_ESTIMATED_HEIGHT) - buffer);
-  const lastVisible = Math.min(
-    props.totalPages - 1,
-    Math.ceil((scrollTop + containerHeight) / PAGE_ESTIMATED_HEIGHT) + buffer
-  );
-
-  const newSet = new Set<number>();
-  for (let i = firstVisible; i <= lastVisible; i++) {
-    newSet.add(i);
+function registerPageEl(el: HTMLElement | null, idx: number) {
+  if (el) {
+    pageElements.set(idx, el);
+  } else {
+    pageElements.delete(idx);
   }
-
-  emit("update:visiblePages", newSet);
 }
 
-// Use IntersectionObserver for more accurate visibility detection
 let observer: IntersectionObserver | null = null;
 
 function setupObserver() {
-  if (observer) observer.disconnect();
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
   if (!scrollerRef.value) return;
+
+  console.log("[PreviewPane] setupObserver, totalPages:", props.totalPages, "elements:", pageElements.size);
 
   observer = new IntersectionObserver(
     (entries) => {
       const visible = new Set<number>();
       for (const entry of entries) {
-        const idx = Number(entry.target.getAttribute("data-page-idx"));
+        const target = entry.target as HTMLElement;
+        const idx = Number(target.dataset.pageIdx);
+        console.log("[PreviewPane] IO entry idx=", idx, "intersecting=", entry.isIntersecting, "ratio=", entry.intersectionRatio);
         if (entry.isIntersecting) {
           visible.add(idx);
         }
       }
-      // Merge with currently visible set (keep pages that were visible before)
-      // and add buffer pages
-      if (visible.size > 0) {
-        const buffered = new Set(visible);
-        for (const idx of visible) {
-          if (idx > 0) buffered.add(idx - 1);
-          if (idx < props.totalPages - 1) buffered.add(idx + 1);
-        }
-        emit("update:visiblePages", buffered);
+
+      if (visible.size === 0) {
+        console.log("[PreviewPane] IO: no intersecting entries");
+        return;
       }
+
+      // Buffer: visible page ± 1 neighbor
+      const buffered = new Set(visible);
+      for (const idx of visible) {
+        if (idx > 0) buffered.add(idx - 1);
+        if (idx < props.totalPages - 1) buffered.add(idx + 1);
+      }
+
+      console.log("[PreviewPane] emitting visiblePages:", Array.from(buffered).sort((a, b) => a - b));
+      emit("update:visiblePages", buffered);
     },
     {
       root: scrollerRef.value,
-      rootMargin: "200px 0px", // 200px buffer above and below viewport
+      rootMargin: "200px 0px",
       threshold: 0,
     }
   );
 
-  for (const el of pageRefs.value) {
-    if (el) observer.observe(el);
+  for (const [, el] of pageElements) {
+    if (el && el.isConnected) {
+      observer.observe(el);
+    }
   }
 }
 
+function teardownObserver() {
+  if (observer) {
+    observer.disconnect();
+    observer = null;
+  }
+  pageElements.clear();
+}
+
 onMounted(() => {
+  console.log("[PreviewPane] mounted, totalPages:", props.totalPages);
   nextTick(() => {
-    updateVisiblePages();
     setupObserver();
   });
 });
 
-watch(() => props.totalPages, () => {
+onUnmounted(() => {
+  teardownObserver();
+});
+
+watch(() => props.totalPages, (newVal) => {
+  console.log("[PreviewPane] totalPages changed:", newVal);
+  teardownObserver();
   nextTick(() => {
-    updateVisiblePages();
     setupObserver();
   });
 });
@@ -148,7 +158,7 @@ const displayScale = computed(() => props.zoom / 2.0);
       <div
         v-for="i in totalPages"
         :key="i"
-        :ref="(el) => { if (el) pageRefs[i - 1] = el as HTMLDivElement }"
+        :ref="(el: any) => registerPageEl(el, i - 1)"
         :data-page-idx="i - 1"
         class="flex justify-center p-4"
       >
