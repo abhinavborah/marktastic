@@ -29,6 +29,17 @@ export function useSvgRenderer(
         markdown: editorContentRef.value,
         templateName: selectedTemplateRef.value,
       });
+
+      // Yield to browser so CodeMirror can process pending keystrokes
+      // before we block the main thread with DOM updates
+      await new Promise<void>((resolve) => {
+        if (typeof (window as any).requestIdleCallback === "function") {
+          (window as any).requestIdleCallback(() => resolve(), { timeout: 50 });
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+
       pages.value = result;
       totalPages.value = result.length;
     } catch (err: any) {

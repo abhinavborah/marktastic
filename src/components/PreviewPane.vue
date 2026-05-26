@@ -13,8 +13,17 @@ const scrollerRef = ref<HTMLDivElement | null>(null);
 
 const hasPages = computed(() => props.totalPages > 0);
 
-// SVG is vector — zoom is pure CSS transform, no re-render needed
+// SVG is vector — zoom is pure CSS, no re-render needed
 const displayScale = computed(() => props.zoom / 2.0);
+
+function svgToDataUrl(svg: string): string {
+  if (svg.startsWith("data:")) return svg;
+  const encoded = svg
+    .replace(/%/g, "%25")
+    .replace(/#/g, "%23")
+    .replace(/\n/g, "%0A");
+  return `data:image/svg+xml,${encoded}`;
+}
 </script>
 
 <template>
@@ -50,20 +59,21 @@ const displayScale = computed(() => props.zoom / 2.0);
       <p class="text-sm">Start typing to see the preview</p>
     </div>
 
-    <!-- SVG Pages -->
+    <!-- SVG Pages via <img> — off-thread parsing -->
     <div v-else ref="scrollerRef" class="flex-1 overflow-auto">
       <div
         v-for="(page, i) in pages"
         :key="i"
         class="flex justify-center p-4"
       >
-        <div
-          class="shadow-lg bg-white"
+        <img
+          :src="svgToDataUrl(page)"
+          :alt="`Page ${i + 1}`"
+          class="shadow-lg"
           :style="{
-            transform: `scale(${displayScale})`,
-            transformOrigin: 'top center',
+            zoom: displayScale,
+            backgroundColor: 'white',
           }"
-          v-html="page"
         />
       </div>
     </div>
