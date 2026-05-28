@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 graphify-out/
+
+# Internal agent documentation (not for release)
+docs-internal/
