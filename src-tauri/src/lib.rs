@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod md_to_typst;
@@ -6,7 +7,7 @@ mod typst_world;
 mod wikilinks;
 mod templates;
 
-use templates::find_template;
+use templates::{find_template, get_user_templates_dir, is_bundled_template};
 use typst_world::TypstWrapperWorld;
 use typst_pdf::PdfOptions;
 
@@ -217,6 +218,70 @@ async fn render_pdf_page_range(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// Get the content of a template for editing.
+#[tauri::command]
+fn get_template_content(template_name: String) -> Result<String, String> {
+    find_template(&template_name)
+}
+
+/// Save or update a user template (fails for built-in templates).
+#[tauri::command]
+fn save_user_template(template_name: String, content: String) -> Result<(), String> {
+    if is_bundled_template(&template_name) {
+        return Err("Cannot modify built-in templates".to_string());
+    }
+    let user_dir = get_user_templates_dir()?;
+    let template_path = user_dir.join(format!("{}.typ", template_name));
+    std::fs::write(&template_path, &content)
+        .map_err(|e| format!("Failed to save template: {}", e))?;
+    Ok(())
+}
+
+/// Delete a user template (fails for built-in templates).
+#[tauri::command]
+fn delete_user_template(template_name: String) -> Result<(), String> {
+    if is_bundled_template(&template_name) {
+        return Err("Cannot delete built-in templates".to_string());
+    }
+    let user_dir = get_user_templates_dir()?;
+    let template_path = user_dir.join(format!("{}.typ", template_name));
+    if !template_path.exists() {
+        return Err(format!("Template '{}' not found", template_name));
+    }
+    std::fs::remove_file(&template_path)
+        .map_err(|e| format!("Failed to delete template: {}", e))?;
+    Ok(())
+}
+
+/// Export a template to a destination file.
+#[tauri::command]
+fn export_template(template_name: String, destination: String) -> Result<(), String> {
+    let content = find_template(&template_name)?;
+    std::fs::write(&destination, &content)
+        .map_err(|e| format!("Failed to export template: {}", e))?;
+    Ok(())
+}
+
+/// Import a template from a .typ file.
+#[tauri::command]
+fn import_template(source_path: String) -> Result<String, String> {
+    let source = PathBuf::from(&source_path);
+    if !source.exists() {
+        return Err(format!("File not found: {}", source_path));
+    }
+    let content = std::fs::read_to_string(&source)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
+    let file_stem = source.file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or("Invalid filename")?
+        .to_string();
+    let user_dir = get_user_templates_dir()?;
+    let dest = user_dir.join(format!("{}.typ", file_stem));
+    std::fs::write(&dest, &content)
+        .map_err(|e| format!("Failed to save imported template: {}", e))?;
+    Ok(file_stem)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let exe_dir = std::env::current_exe()
@@ -246,6 +311,11 @@ pub fn run() {
             open_file_path,
             open_folder,
             get_templates,
+            get_template_content,
+            save_user_template,
+            delete_user_template,
+            export_template,
+            import_template,
             render_pdf_pages,
             get_pdf_page_count,
             render_pdf_page_range,
