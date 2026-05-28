@@ -5,18 +5,30 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
-    runs-on: macos-latest
+    runs-on: macos-14
     
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
       
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: 'npm'
+      
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
       
       - name: Install dependencies
         run: npm ci
@@ -24,29 +36,32 @@ jobs:
       - name: Build Tauri
         run: npx tauri build
       
+      - name: Ad-hoc sign
+        run: |
+          cd src-tauri/target/release/bundle/macos
+          codesign --force --deep --sign - marktastic.app
+      
       - name: Package
         run: |
           cd src-tauri/target/release/bundle/macos
           zip -r marktastic.zip marktastic.app
-          if [ -d dsym ]; then
-            zip -r marktastic-dsym.zip dsym
-          else
-            echo "No dSYM directory found; skipping symbol archive."
-          fi
+      
+      - name: Generate checksums
+        run: |
+          cd src-tauri/target/release/bundle/macos
+          sha256sum marktastic.zip > marktastic.zip.sha256
       
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             src-tauri/target/release/bundle/macos/marktastic.zip
-            src-tauri/target/release/bundle/macos/marktastic-dsym.zip
+            src-tauri/target/release/bundle/macos/marktastic.zip.sha256
           draft: true
           generate_release_notes: true
-          name: "Marktastic v0.1.0"
+          name: "Marktastic ${{ github.ref_name }}"
           body: |
-            Marktastic v0.1.0 - Initial Release
-            
-            A cross-platform desktop app that converts Markdown (GFM + Wikilinks) into beautifully typeset PDFs with live preview.
+            Marktastic ${{ github.ref_name }}
             
             See CHANGELOG.md for full release notes.
         env:
