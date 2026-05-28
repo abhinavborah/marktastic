@@ -27,37 +27,46 @@ pub fn get_user_templates_dir() -> Result<PathBuf, String> {
 
 /// Returns the bundled templates directory path.
 ///
-/// In production: `app.app/Contents/Resources/templates/`
-/// In development: `src-tauri/templates/`
+/// Lookup order:
+/// 1. CARGO_MANIFEST_DIR/templates (dev mode via `tauri dev`)
+/// 2. app.app/Contents/Resources/templates/ (production macOS)
+/// 3. exe_dir/templates (dev mode, exe next to templates)
+/// 4. src-tauri/templates (fallback relative to repo root)
 ///
 /// # Returns
 /// * `Ok(PathBuf)` - The path to the bundled templates directory
 /// * `Err(String)` - Error message if directory not found
 pub fn get_bundled_templates_dir() -> Result<PathBuf, String> {
-    // For bundled templates, we need to look relative to the executable
-    let exe_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get executable path: {}", e))?;
-    
-    let exe_dir = exe_path.parent()
-        .ok_or("Failed to get executable directory")?;
-    
-    // Try multiple possible locations (production and development)
     let bundled_paths = [
-        // Production macOS: app.app/Contents/Resources/templates/
-        exe_dir.join("Resources").join("templates"),
-        // macOS dev: target/debug/marktastic/templates/
-        exe_dir.join("templates"),
-        // Fallback: relative to current working directory (dev)
-        PathBuf::from("src-tauri/templates"),
-        PathBuf::from("templates"),
-    ];
-    
+        // 1. DEV MODE (tauri dev) — use CARGO_MANIFEST_DIR if available
+        std::env::var("CARGO_MANIFEST_DIR")
+            .map(|dir| PathBuf::from(dir).join("templates"))
+            .ok(),
+        
+        // 2. Production macOS .app bundle
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("Resources").join("templates"))),
+        
+        // 3. Dev mode (exe next to templates dir)
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|d| d.join("templates"))),
+        
+        // 4. Fallback: relative to repo root
+        Some(PathBuf::from("src-tauri/templates")),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+
+
     for path in &bundled_paths {
         if path.exists() && path.is_dir() {
             return Ok(path.clone());
         }
     }
-    
+
     Err("Bundled templates directory not found".to_string())
 }
 
@@ -124,8 +133,8 @@ pub fn is_bundled_template(name: &str) -> bool {
 /// Find a template by name using two-tier lookup.
 ///
 /// Lookup order:
-/// 1. User templates (`~/.marktastic/templates/{name}.typ`) - user templates take precedence
-/// 2. Bundled templates (`Resources/templates/{name}.typ` or `src-tauri/templates/{name}.typ`)
+/// 1. User templates (`~/.marktastic/templates/{name}.typ`) — user templates take precedence
+/// 2. Bundled templates — search order: CARGO_MANIFEST_DIR, Resources, exe_dir, src-tauri/templates
 ///
 /// # Arguments
 /// * `name` - Template name (without .typ extension)
