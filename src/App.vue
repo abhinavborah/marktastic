@@ -2,13 +2,10 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { open as openInShell } from "@tauri-apps/plugin-shell";
-import { join, tempDir } from "@tauri-apps/api/path";
 import { writeFile } from "@tauri-apps/plugin-fs";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 
 import { useTheme } from "./composables/useTheme";
-import { usePdf } from "./composables/usePdf";
 import { useSvgRenderer } from "./composables/useSvgRenderer";
 import { useToast } from "./composables/useToast";
 import { useKeyboard } from "./composables/useKeyboard";
@@ -42,14 +39,6 @@ const { theme, setTheme, cycleTheme } = useTheme();
 // ─── Toast ───
 const toast = useToast();
 
-// ─── PDF ───
-const { pdfBytes, pdfLoading, lastError } = usePdf(
-  editorContent,
-  selectedTemplate,
-  toast
-);
-
-// ─── SVG Preview Renderer ───
 const { pages, totalPages, rendering: svgRendering, renderError, isRecompiling } = useSvgRenderer(
   editorContent,
   selectedTemplate
@@ -66,8 +55,7 @@ watch(isRecompiling, (val) => {
   }
 });
 
-const previewLoading = computed(() => pdfLoading.value || svgRendering.value);
-const previewError = computed(() => lastError.value || renderError.value);
+const previewLoading = computed(() => svgRendering.value);
 
 // ─── Keyboard Shortcuts ───
 useKeyboard({
@@ -224,54 +212,28 @@ function handleZoomOut() {
   console.log("Zoom out new value:", zoomLevel.value);
 }
 
-// ─── Open in Preview ───
-async function openInPreview() {
-  if (!pdfBytes.value || pdfBytes.value.length === 0) {
-    toast.warning("No PDF to preview. Open a file first.");
-    return;
-  }
-  try {
-    const temp = await tempDir();
-    const tempPath = await join(temp, "marktastic-preview.pdf");
-    await writeFile(tempPath, pdfBytes.value);
-    await openInShell(tempPath);
-    toast.success("Opened PDF in system preview");
-  } catch (err: any) {
-    console.error("Failed to open preview:", err);
-    toast.error(`Preview failed: ${err?.message || String(err)}`);
-  }
-}
-
 // ─── Export PDF ───
 async function handleExportPdf() {
-  console.log("Export: checking pdfBytes...", pdfBytes.value?.length);
-  if (!pdfBytes.value || pdfBytes.value.length === 0) {
-    toast.warning("No PDF to export. Open a file first.");
-    return;
-  }
-
-  try {
-    toast.info("Preparing export...", 2000);
-    console.log("Export: opening save dialog...");
-    const path = await save({
+  const path = await save({
       filters: [{ name: "PDF", extensions: ["pdf"] }],
       defaultPath: "document.pdf",
     });
-    console.log("Export: save dialog returned:", path);
     if (!path || typeof path !== "string") {
-      console.log("Export: no path selected, cancelling");
       return;
     }
 
-    console.log("Export: writing file to", path, "bytes:", pdfBytes.value.length);
-    await writeFile(path, pdfBytes.value);
-    console.log("Export: file written successfully");
-    toast.success(`Saved to ${path.split(/[/\\]/).pop() || path}`);
-  } catch (err: any) {
-    console.error("Export: FAILED with error:", err);
-    console.error("Export: error message:", err?.message || String(err));
-    toast.error(`Export failed: ${err?.message || String(err)}`);
-  }
+
+    try {
+      toast.info("Compiling PDF...", 0);
+      const pdfBytes = await invoke<number[]>("convert_md_to_pdf", {
+        markdown: editorContent.value,
+        templateName: selectedTemplate.value,
+      });
+      await writeFile(path, new Uint8Array(pdfBytes));
+      toast.success(`Saved to ${path.split(/[/\\]/).pop() || path}`);
+    } catch (err: any) {
+      toast.error(`Export failed: ${err?.message || String(err)}`);
+    }
 }
 </script>
 
@@ -310,7 +272,6 @@ async function handleExportPdf() {
         @toggle-word-wrap="wordWrap = !wordWrap"
         @zoom-in="handleZoomIn"
         @zoom-out="handleZoomOut"
-        @open-in-preview="openInPreview"
       >
         <template #editor>
           <EditorPane
@@ -324,7 +285,7 @@ async function handleExportPdf() {
             :pages="pages"
             :total-pages="totalPages"
             :rendering="previewLoading"
-            :error="previewError"
+            :error="renderError"
             :zoom="zoomLevel"
           />
         </template>
