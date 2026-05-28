@@ -1,15 +1,15 @@
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 mod md_to_typst;
 mod pdfium_renderer;
 mod typst_world;
 mod wikilinks;
+mod templates;
 
+use templates::find_template;
 use typst_world::TypstWrapperWorld;
 use typst_pdf::PdfOptions;
 
-const TEMPLATE_DIR: &str = "templates";
 const MARKER: &str = "// MARKTASTIC_BODY_CONTENT";
 
 /// Persistent Typst compilation state.
@@ -19,41 +19,8 @@ struct AppState {
 
 /// Build the full Typst source by resolving template and injecting body.
 fn build_full_source(typst_body: &str, template_name: &str) -> Result<String, String> {
-    let exe_dir = std::env::current_exe()
-        .map_err(|e| format!("Failed to get executable path: {}", e))?
-        .parent()
-        .ok_or("Failed to get executable directory")?
-        .to_path_buf();
-
-    let template_path_candidates = [
-        exe_dir.join(TEMPLATE_DIR).join(format!("{}.typ", template_name)),
-        exe_dir.join("../..").join(TEMPLATE_DIR).join(format!("{}.typ", template_name)),
-        PathBuf::from(format!("src-tauri/{}/{}", TEMPLATE_DIR, template_name)),
-        PathBuf::from(format!("{}/{}", TEMPLATE_DIR, template_name)),
-    ];
-
-    let template_content = {
-        let mut found = None;
-        for path in &template_path_candidates {
-            let path_with_ext = if path.extension().is_none() {
-                path.with_extension("typ")
-            } else {
-                path.clone()
-            };
-            if path_with_ext.exists() {
-                found = Some(
-                    std::fs::read_to_string(&path_with_ext)
-                        .map_err(|e| format!("Failed to read template file: {}", e))?
-                );
-                break;
-            }
-        }
-        found.ok_or_else(|| format!(
-            "Template '{}' not found. Searched: {:?}",
-            template_name,
-            template_path_candidates
-        ))?
-    };
+    // Use two-tier template lookup (user templates override bundled)
+    let template_content = find_template(template_name)?;
 
     let full_source = if template_content.contains(MARKER) {
         template_content.replace(MARKER, typst_body)
@@ -204,46 +171,8 @@ async fn open_folder(folder_path: String) -> Result<Vec<(String, String)>, Strin
 #[tauri::command]
 async fn get_templates() -> Result<Vec<String>, String> {
     tokio::task::spawn_blocking(move || {
-        let exe_dir = std::env::current_exe()
-            .map_err(|e| format!("Failed to get executable path: {}", e))?
-            .parent()
-            .ok_or("Failed to get executable directory")?
-            .to_path_buf();
-
-        let template_dir_candidates = [
-            exe_dir.join(TEMPLATE_DIR),
-            exe_dir.join("../..").join(TEMPLATE_DIR),
-            PathBuf::from(format!("src-tauri/{}", TEMPLATE_DIR)),
-            PathBuf::from(TEMPLATE_DIR),
-        ];
-
-        let mut templates = Vec::new();
-        for dir in &template_dir_candidates {
-            if let Ok(entries) = std::fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.extension().map(|e| e == "typ").unwrap_or(false) {
-                        if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                            templates.push(stem.to_string());
-                        }
-                    }
-                }
-                if !templates.is_empty() {
-                    break;
-                }
-            }
-        }
-
-        if templates.is_empty() {
-            // Fallback: return known templates
-            templates = vec![
-                "basic-report".to_string(),
-                "university-assignment".to_string(),
-                "thesis-chapter".to_string(),
-            ];
-        }
-
-        Ok(templates)
+        // Use merged template list (user + bundled) from templates module
+        templates::get_all_template_names()
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?
