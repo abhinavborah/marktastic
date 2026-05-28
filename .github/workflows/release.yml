@@ -28,7 +28,11 @@ jobs:
         run: |
           cd src-tauri/target/release/bundle/macos
           zip -r marktastic.zip marktastic.app
-          zip -r marktastic-dsym.zip dsym/
+          if [ -d dsym ]; then
+            zip -r marktastic-dsym.zip dsym
+          else
+            echo "No dSYM directory found; skipping symbol archive."
+          fi
       
       - name: Create Release
         uses: softprops/action-gh-release@v2
