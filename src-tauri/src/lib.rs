@@ -7,7 +7,7 @@ mod typst_world;
 mod wikilinks;
 mod templates;
 
-use templates::{find_template, get_user_templates_dir, is_bundled_template};
+use templates::{find_template, is_bundled_template};
 use typst_world::TypstWrapperWorld;
 use typst_pdf::PdfOptions;
 
@@ -218,6 +218,13 @@ async fn render_pdf_page_range(
     .map_err(|e| format!("Task join error: {}", e))?
 }
 
+/// Get the user templates directory path.
+#[tauri::command]
+fn get_user_templates_dir_cmd() -> Result<String, String> {
+    templates::get_user_templates_dir()
+        .map(|p| p.to_string_lossy().to_string())
+}
+
 /// Get the content of a template for editing.
 #[tauri::command]
 fn get_template_content(template_name: String) -> Result<String, String> {
@@ -230,7 +237,7 @@ fn save_user_template(template_name: String, content: String) -> Result<(), Stri
     if is_bundled_template(&template_name) {
         return Err("Cannot modify built-in templates".to_string());
     }
-    let user_dir = get_user_templates_dir()?;
+    let user_dir = templates::get_user_templates_dir()?;
     let template_path = user_dir.join(format!("{}.typ", template_name));
     std::fs::write(&template_path, &content)
         .map_err(|e| format!("Failed to save template: {}", e))?;
@@ -243,7 +250,7 @@ fn delete_user_template(template_name: String) -> Result<(), String> {
     if is_bundled_template(&template_name) {
         return Err("Cannot delete built-in templates".to_string());
     }
-    let user_dir = get_user_templates_dir()?;
+    let user_dir = templates::get_user_templates_dir()?;
     let template_path = user_dir.join(format!("{}.typ", template_name));
     if !template_path.exists() {
         return Err(format!("Template '{}' not found", template_name));
@@ -275,7 +282,7 @@ fn import_template(source_path: String) -> Result<String, String> {
         .and_then(|s| s.to_str())
         .ok_or("Invalid filename")?
         .to_string();
-    let user_dir = get_user_templates_dir()?;
+    let user_dir = templates::get_user_templates_dir()?;
     let dest = user_dir.join(format!("{}.typ", file_stem));
     std::fs::write(&dest, &content)
         .map_err(|e| format!("Failed to save imported template: {}", e))?;
@@ -311,6 +318,7 @@ pub fn run() {
             open_file_path,
             open_folder,
             get_templates,
+            get_user_templates_dir_cmd,
             get_template_content,
             save_user_template,
             delete_user_template,
