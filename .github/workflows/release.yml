@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: macos-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Build Tauri
+        run: npx tauri build
+      
+      - name: Package
+        run: |
+          cd src-tauri/target/release/bundle/macos
+          zip -r marktastic.zip marktastic.app
+          zip -r marktastic-dsym.zip dsym/
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/macos/marktastic.zip
+            src-tauri/target/release/bundle/macos/marktastic-dsym.zip
+          draft: true
+          generate_release_notes: true
+          name: "Marktastic v0.1.0"
+          body: |
+            Marktastic v0.1.0 - Initial Release
+            
+            A cross-platform desktop app that converts Markdown (GFM + Wikilinks) into beautifully typeset PDFs with live preview.
+            
+            See CHANGELOG.md for full release notes.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
