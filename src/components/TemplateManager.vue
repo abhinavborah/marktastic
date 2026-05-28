@@ -131,6 +131,22 @@ function handleClose() {
   emit("close");
 }
 
+// Reserved template names (built-in templates)
+const reservedNames = ["basic-report", "university-assignment", "thesis-chapter"];
+
+function isReservedName(name: string): boolean {
+  return reservedNames.includes(name.toLowerCase());
+}
+
+// Check if current editing template name is reserved
+function getNameValidationError(): string | null {
+  if (!editingTemplate.value?.name) return null;
+  if (isReservedName(editingTemplate.value.name)) {
+    return `Template name '${editingTemplate.value.name}' is reserved. Choose a different name.`;
+  }
+  return null;
+}
+
 function handleCreateNew() {
   editingTemplate.value = { name: "", source: "user" };
   editingContent.value = `// New Template
@@ -349,6 +365,14 @@ function handleCreateNew() {
             :disabled="editingTemplate?.source === 'bundled'"
           />
         </div>
+        <div v-if="getNameValidationError()" class="px-4 py-2 bg-destructive/10 text-destructive text-sm flex items-center gap-2">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          {{ getNameValidationError() }}
+        </div>
 
         <div class="flex-1 overflow-hidden p-4">
           <textarea
@@ -368,7 +392,7 @@ function handleCreateNew() {
           </button>
           <button
             class="px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-            :disabled="isSaving || !editingTemplate?.name"
+            :disabled="isSaving || !editingTemplate?.name || isReservedName(editingTemplate.name)"
             @click="handleSave"
           >
             {{ isSaving ? "Saving..." : "Save" }}
