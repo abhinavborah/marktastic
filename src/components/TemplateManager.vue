@@ -125,6 +125,9 @@ function handleEditorClose() {
   showEditor.value = false;
   editingTemplate.value = null;
   editingContent.value = "";
+}
+
+function handleClose() {
   emit("close");
 }
 
@@ -150,15 +153,27 @@ function handleCreateNew() {
     <!-- Header -->
     <div class="flex items-center justify-between px-4 py-3 border-b">
       <h2 class="text-lg font-semibold">Manage Templates</h2>
-      <button
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-        @click="handleCreateNew"
-      >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        New
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="p-1.5 rounded hover:bg-muted transition-colors"
+          title="Close"
+          @click="handleClose"
+        >
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+        <button
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+          @click="handleCreateNew"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          New
+        </button>
+      </div>
     </div>
 
     <!-- Template List -->
@@ -308,7 +323,7 @@ function handleCreateNew() {
       class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
       @click.self="handleEditorClose"
     >
-      <div class="bg-card border rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div @click.stop class="bg-card border rounded-lg shadow-lg max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between px-4 py-3 border-b">
           <h3 class="text-lg font-semibold">
             {{ editingTemplate?.name ? "Edit Template" : "New Template" }}
