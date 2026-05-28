@@ -16,6 +16,7 @@ import WelcomeScreen from "./components/WelcomeScreen.vue";
 import SplitView from "./components/SplitView.vue";
 import EditorPane from "./components/EditorPane.vue";
 import PreviewPane from "./components/PreviewPane.vue";
+import TemplateManager from "./components/TemplateManager.vue";
 
 // ─── State ───
 const editorContent = ref("");
@@ -30,6 +31,7 @@ const isFolderMode = ref(false);
 const paneMode = ref<PaneMode>("both");
 const wordWrap = ref(false);
 const zoomLevel = ref(1.0);
+const showTemplateManager = ref(false);
 
 const hasContent = computed(() => editorContent.value.trim().length > 0);
 
@@ -252,6 +254,7 @@ async function handleExportPdf() {
       @open-file="handleOpenFile"
       @open-folder="handleOpenFolder"
       @export-pdf="handleExportPdf"
+      @open-template-manager="showTemplateManager = true"
     />
 
     <!-- Main area -->
@@ -292,7 +295,8 @@ async function handleExportPdf() {
       </SplitView>
     </main>
 
-    <!-- Toast notifications removed from here — now inside <main> -->
+    <!-- Template Manager Modal -->
+    <TemplateManager v-if="showTemplateManager" @close="showTemplateManager = false" />
   </div>
 </template>
 

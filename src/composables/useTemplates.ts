@@ -18,7 +18,7 @@ export function useTemplates() {
     error.value = null;
     try {
       // Get user templates dir to determine source
-      userTemplatesDir.value = await invoke<string>("get_user_templates_dir");
+      userTemplatesDir.value = await invoke<string>("get_user_templates_dir_cmd");
 
       // Get all template names
       const names: string[] = await invoke("get_templates");
@@ -96,7 +96,7 @@ export function useTemplates() {
 
   // Get user templates directory path
   async function getUserTemplatesDir(): Promise<string> {
-    return invoke<string>("get_user_templates_dir");
+    return invoke<string>("get_user_templates_dir_cmd");
   }
 
   return {

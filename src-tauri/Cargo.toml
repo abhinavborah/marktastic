@@ -43,4 +43,5 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 base64 = "0.22"
 typst-svg = "0.14.2"
 tokio = { version = "1", features = ["rt", "rt-multi-thread"] }
+dirs = "5"
 

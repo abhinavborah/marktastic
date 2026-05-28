@@ -18,6 +18,10 @@ const {
 
 const toast = useToast();
 
+const emit = defineEmits<{
+  (e: "close"): void;
+}>();
+
 const showEditor = ref(false);
 const editingTemplate = ref<Template | null>(null);
 const editingContent = ref("");
@@ -121,6 +125,7 @@ function handleEditorClose() {
   showEditor.value = false;
   editingTemplate.value = null;
   editingContent.value = "";
+  emit("close");
 }
 
 function handleCreateNew() {
