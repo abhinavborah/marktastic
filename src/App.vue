@@ -9,6 +9,7 @@ import { useTheme } from "./composables/useTheme";
 import { useSvgRenderer } from "./composables/useSvgRenderer";
 import { useToast } from "./composables/useToast";
 import { useKeyboard } from "./composables/useKeyboard";
+import { useTemplates } from "./composables/useTemplates";
 import type { PaneMode } from "./composables/useKeyboard";
 
 import Toolbar from "./components/Toolbar.vue";
@@ -21,7 +22,6 @@ import TemplateManager from "./components/TemplateManager.vue";
 // ─── State ───
 const editorContent = ref("");
 const selectedTemplate = ref("basic-report");
-const templates = ref<string[]>([]);
 const isWelcome = ref(true);
 const currentFilePath = ref<string | null>(null);
 const currentFolderPath = ref<string | null>(null);
@@ -41,10 +41,14 @@ const { theme, setTheme, cycleTheme } = useTheme();
 // ─── Toast ───
 const toast = useToast();
 
+// ─── SVG Preview Renderer ───
 const { pages, totalPages, rendering: svgRendering, renderError, isRecompiling } = useSvgRenderer(
   editorContent,
   selectedTemplate
 );
+
+// ─── Templates ───
+const { templates, refreshTemplates } = useTemplates();
 
 // Show "Recompiling..." toast while SVG is recompiling
 const recompileToastId = ref<number | null>(null);
@@ -93,15 +97,9 @@ async function updateWindowTitle() {
 
 // ─── Load templates on mount ───
 onMounted(async () => {
-  try {
-    const list = await invoke<string[]>("get_templates");
-    templates.value = list;
-    if (list.length > 0 && !list.includes(selectedTemplate.value)) {
-      selectedTemplate.value = list[0];
-    }
-  } catch (err) {
-    console.error("Failed to load templates:", err);
-    templates.value = ["basic-report", "university-assignment", "thesis-chapter"];
+  await refreshTemplates();
+  if (templates.value.length > 0 && !templates.value.some(t => t.name === selectedTemplate.value)) {
+    selectedTemplate.value = templates.value[0].name;
   }
 });
 
@@ -244,7 +242,7 @@ async function handleExportPdf() {
     <!-- Toolbar -->
     <Toolbar
       :theme="theme"
-      :templates="templates"
+      :templates="templates.map(t => t.name)"
       :selected-template="selectedTemplate"
       :has-content="hasContent"
       :folder-path="currentFolderPath"

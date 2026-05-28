@@ -7,7 +7,7 @@ mod typst_world;
 mod wikilinks;
 mod templates;
 
-use templates::{find_template, is_bundled_template};
+use templates::{find_template, is_bundled_template, get_all_template_infos, TemplateInfo};
 use typst_world::TypstWrapperWorld;
 use typst_pdf::PdfOptions;
 
@@ -170,10 +170,10 @@ async fn open_folder(folder_path: String) -> Result<Vec<(String, String)>, Strin
 }
 
 #[tauri::command]
-async fn get_templates() -> Result<Vec<String>, String> {
+async fn get_templates() -> Result<Vec<TemplateInfo>, String> {
     tokio::task::spawn_blocking(move || {
         // Use merged template list (user + bundled) from templates module
-        templates::get_all_template_names()
+        get_all_template_infos()
     })
     .await
     .map_err(|e| format!("Task join error: {}", e))?

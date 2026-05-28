@@ -6,6 +6,15 @@
 
 use std::path::PathBuf;
 
+/// Information about a template (name + source).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct TemplateInfo {
+    pub name: String,
+    pub source: String, // "bundled" or "user"
+}
+
+/// Returns all templates with their source information.
+
 /// Returns the user templates directory (`~/.marktastic/templates/`) and creates it if missing.
 ///
 /// # Returns
@@ -112,6 +121,60 @@ pub fn get_all_template_names() -> Result<Vec<String>, String> {
     
     // Sort and return
     templates.sort();
+    Ok(templates)
+}
+
+/// Get all templates with source information.
+///
+/// # Returns
+/// * `Ok(Vec<TemplateInfo>)` - List of templates with name and source
+/// * `Err(String)` - Error message
+pub fn get_all_template_infos() -> Result<Vec<TemplateInfo>, String> {
+    let user_dir = get_user_templates_dir()?;
+    let bundled_dir = get_bundled_templates_dir()?;
+    let mut templates: Vec<TemplateInfo> = Vec::new();
+    
+    // Add bundled templates first
+    if bundled_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&bundled_dir) {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.ends_with(".typ") {
+                        let template_name = name.trim_end_matches(".typ").to_string();
+                        templates.push(TemplateInfo {
+                            name: template_name,
+                            source: "bundled".to_string(),
+                        });
+                    }
+                }
+            }
+        }
+    }
+    
+    // Add user templates (if not already in list)
+    if user_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&user_dir) {
+            for entry in entries.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.ends_with(".typ") {
+                        let template_name = name.trim_end_matches(".typ").to_string();
+                        // Update existing to user (override)
+                        if let Some(t) = templates.iter_mut().find(|t| t.name == template_name) {
+                            t.source = "user".to_string();
+                        } else {
+                            templates.push(TemplateInfo {
+                                name: template_name,
+                                source: "user".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Sort and return
+    templates.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(templates)
 }
 

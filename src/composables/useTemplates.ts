@@ -12,29 +12,16 @@ export function useTemplates() {
   const error = ref<string | null>(null);
   const userTemplatesDir = ref<string | null>(null);
 
-  // Fetch all available template names
+  // Fetch all available template names with source info
   async function refreshTemplates() {
     loading.value = true;
     error.value = null;
     try {
-      // Get user templates dir to determine source
+      // Get user templates dir for reference
       userTemplatesDir.value = await invoke<string>("get_user_templates_dir_cmd");
 
-      // Get all template names
-      const names: string[] = await invoke("get_templates");
-
-      // Determine source for each template by checking if it exists in user dir
-      const result: Template[] = [];
-      for (const name of names) {
-        // All templates start as bundled, then we check for user overrides
-        // We need to check if template exists in user dir - but that's async per template
-        // For now, mark all as bundled - frontend can check at edit/delete time
-        result.push({
-          name,
-          source: "bundled", // Will be updated when we have a better method
-        });
-      }
-
+      // Get all templates (now returns name + source directly)
+      const result: Template[] = await invoke<Template[]>("get_templates");
       templates.value = result;
     } catch (e) {
       error.value = String(e);
