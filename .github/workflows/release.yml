@@ -49,7 +49,11 @@ jobs:
       - name: Generate checksums
         run: |
           cd src-tauri/target/release/bundle/macos
-          sha256sum marktastic.zip > marktastic.zip.sha256
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum marktastic.zip > marktastic.zip.sha256
+          else
+            shasum -a 256 marktastic.zip > marktastic.zip.sha256
+          fi
       
       - name: Create Release
         uses: softprops/action-gh-release@v2
