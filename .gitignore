@@ -27,3 +27,11 @@ graphify-out/
 
 # Internal agent documentation (not for release)
 docs-internal/
+
+# Agent workspace files (runtime decisions, not committed)
+handoff.md
+agent-info.md
+context/
+
+# Rust build output
+src-tauri/target/
