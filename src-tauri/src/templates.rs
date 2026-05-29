@@ -53,9 +53,10 @@ pub fn get_bundled_templates_dir() -> Result<PathBuf, String> {
             .ok(),
         
         // 2. Production macOS .app bundle
+        // exe: .app/Contents/MacOS/marktastic → need to go up 2 levels to .app/
         std::env::current_exe()
             .ok()
-            .and_then(|p| p.parent().map(|d| d.join("Resources").join("templates"))),
+            .and_then(|p| p.parent().and_then(|p| p.parent()).map(|d| d.join("Resources").join("templates"))),
         
         // 3. Dev mode (exe next to templates dir)
         std::env::current_exe()
