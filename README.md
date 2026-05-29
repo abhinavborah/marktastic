@@ -2,13 +2,16 @@
 
 > Convert Markdown to beautiful PDFs
 
+![marktastic-app](./demo/marktastic-app.png)
+
 [![Tauri](https://img.shields.io/badge/Tauri-v2-24C8D8?logo=tauri)](https://tauri.app)
 [![Vue](https://img.shields.io/badge/Vue-3-4FC08D?logo=vuedotjs)](https://vuejs.org)
 [![Typst](https://img.shields.io/badge/Typst-0.14-239DAD?logo=typst)](https://typst.app)
 [![Rust](https://img.shields.io/badge/Rust-2021-000000?logo=rust)](https://www.rust-lang.org)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](#license)
 
----
+## Quickstart
+
+![installation-guide](./demo/marktastic-installation-guide.png)
 
 ## Description
 
@@ -20,24 +23,25 @@ Key differentiators:
 - **Wikilink support** — write multi-file projects with `[[filename]]` links that merge into a single PDF
 - **Built-in Typst templates** — professional layouts out of the box
 
-Available for **Windows**, **macOS**, and **Linux**.
+Available for **macOS** (**Windows** and **Linux** coming soon).
 
 ---
 
 ## Features
 
-| Feature                 | Description                                                                                                    |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Live PDF Preview**    | See your PDF update in real time as you type (500 ms debounce)                                                 |
-| **CodeMirror 6 Editor** | Full-featured Markdown editor with syntax highlighting, line numbers, and word wrap toggle                     |
-| **Split View**          | Resizable side-by-side editor and preview with pane mode toggles                                               |
-| **Wikilink Support**    | Open folders with `[[filename]]` wikilinks; all linked Markdown files merge into one PDF                       |
-| **Built-in Templates**  | 3 professional Typst templates: Basic Report, University Assignment, Thesis Chapter                            |
-| **Dark Mode**           | 3 modes: Light, Dark, System (follows OS preference)                                                           |
-| **Keyboard Shortcuts**  | Full shortcut coverage for file operations, pane toggles, theme cycling, and more                              |
-| **Multi-file Projects** | Open a folder with an `index.md` or `main.md` entry point; wikilinks automatically resolve sibling `.md` files |
-| **Toast Notifications** | Visual feedback for file operations, compilation status, and export success or failure                         |
-| **Smart Scroll Sync**   | Editor and preview scroll positions stay roughly synchronized                                                  |
+| Feature                         | Description                                                                                                    |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Live PDF Preview**            | See your PDF update in real time as you type (500 ms debounce)                                                 |
+| **CodeMirror 6 Editor**         | Full-featured Markdown editor with syntax highlighting, line numbers, and word wrap toggle                     |
+| **Split View**                  | Resizable side-by-side editor and preview with pane mode toggles                                               |
+| **Wikilink Support**            | Open folders with `[[filename]]` wikilinks; all linked Markdown files merge into one PDF                       |
+| **Built-in Templates**          | 3 professional Typst templates: Basic Report, University Assignment, Thesis Chapter                            |
+| **Dark Mode**                   | 3 modes: Light, Dark, System (follows OS preference)                                                           |
+| **Keyboard Shortcuts**          | Full shortcut coverage for file operations, pane toggles, theme cycling, and more                              |
+| **Multi-file Projects**         | Open a folder with an `index.md` or `main.md` entry point; wikilinks automatically resolve sibling `.md` files |
+| **Toast Notifications**         | Visual feedback for file operations, compilation status, and export success or failure                         |
+| **Smart Scroll Sync**           | Editor and preview scroll positions stay roughly synchronized                                                  |
+| **Customizable User Templates** | User can manage and import their custom .typ templates. Templates are stored in `~/.marktastic/templates/`     |
 
 ---
 
@@ -54,17 +58,11 @@ Available for **Windows**, **macOS**, and **Linux**.
 
 ---
 
-## Screenshots
-
-_Screenshots coming soon._
-
----
-
 ## Installation
 
 ### Download Pre-built Binaries
 
-> **Note:** Pre-built binaries are not yet published. This section will be updated when releases are available.
+Check the [releases page](https://github.com/abhinavborah/marktastic/releases) for pre-built binaries.
 
 ### Build from Source
 
@@ -107,50 +105,6 @@ cd src-tauri && cargo check
 
 # Run production build (creates .app, .dmg, .msi, .deb, etc.)
 npm run tauri build
-```
-
----
-
-## Project Structure
-
-```
-marktastic/
-├── src/                          # Vue frontend
-│   ├── components/               # Vue components
-│   │   ├── EditorPane.vue        # CodeMirror 6 editor
-│   │   ├── PreviewPane.vue       # PDF iframe preview
-│   │   ├── SplitView.vue         # Resizable split pane
-│   │   ├── Toolbar.vue           # App toolbar
-│   │   ├── WelcomeScreen.vue     # Landing screen
-│   │   └── ToastContainer.vue    # Toast notifications
-│   ├── composables/              # Vue composables
-│   │   ├── usePdf.ts             # PDF generation logic
-│   │   ├── useTheme.ts           # Dark mode management
-│   │   ├── useScrollSync.ts      # Editor↔preview scroll sync
-│   │   ├── useToast.ts           # Toast system
-│   │   └── useKeyboard.ts        # Global keyboard shortcuts
-│   ├── lib/                      # Utility helpers
-│   │   └── utils.ts
-│   ├── App.vue                   # Main app shell
-│   ├── main.ts                   # Entry point
-│   └── types.ts                  # Shared TypeScript types
-├── src-tauri/                    # Rust + Tauri backend
-│   ├── src/
-│   │   ├── main.rs               # Binary entry point
-│   │   ├── lib.rs                # Tauri commands & app setup
-│   │   ├── md_to_typst.rs        # Markdown → Typst converter
-│   │   ├── wikilinks.rs          # Wikilink resolver
-│   │   └── typst_world.rs        # Typst compilation world
-│   ├── templates/                # Built-in Typst templates
-│   │   ├── basic-report.typ
-│   │   ├── university-assignment.typ
-│   │   └── thesis-chapter.typ
-│   ├── Cargo.toml
-│   └── tauri.conf.json
-├── package.json
-├── vite.config.ts
-├── tailwind.config.js
-└── tsconfig.json
 ```
 
 ---
@@ -202,34 +156,13 @@ Check [[results]] and [[discussion]].
 
 ---
 
-## Templates
-
-Marktastic ships with three built-in Typst templates. Switch between them via the template selector in the toolbar.
-
-| Template                  | Best For                                                     |
-| ------------------------- | ------------------------------------------------------------ |
-| **Basic Report**          | General documents, meeting notes, one-off write-ups          |
-| **University Assignment** | Coursework with title page, headers, and academic formatting |
-| **Thesis Chapter**        | Long-form academic writing with chapter-oriented structure   |
-
----
-
 ## Roadmap
 
 Planned enhancements:
 
-- [ ] Custom user-defined Typst templates
+- [x] Custom user-defined Typst templates
 - [ ] File sidebar for folder mode navigation
 - [ ] Find and replace in the editor
-- [ ] Print support
 - [ ] Auto-save
 - [ ] Plugin system for custom Markdown extensions
-
----
-
-## Acknowledgments
-
-- [Tauri](https://tauri.app) team for the cross-platform desktop framework
-- [Typst](https://typst.app) team for the modern typesetting system
-- [CodeMirror 6](https://codemirror.net) team for the editor
-- [shadcn-vue](https://www.shadcn-vue.com) for the component system
+- [ ] Robust cross-platform support
