@@ -15,13 +15,13 @@
 
 ## Description
 
-**Marktastic** is a cross-platform desktop application that transforms Markdown — including GitHub Flavored Markdown and wikilinks — into professionally typeset PDFs using [Typst](https://typst.app). Unlike tools that preview rendered HTML, Marktastic shows a **live PDF preview** so you see exactly what will be printed.
+**Marktastic** is a cross-platform desktop application that transforms Markdown (including GitHub Flavored Markdown and wikilinks) into professionally typeset PDFs using [Typst](https://typst.app). Unlike tools that preview rendered HTML, Marktastic shows a **live PDF preview** so you see exactly what will be printed.
 
 Key differentiators:
 
-- **Live PDF preview** — not HTML, actual PDF output rendered in real time
-- **Wikilink support** — write multi-file projects with `[[filename]]` links that merge into a single PDF
-- **Built-in Typst templates** — professional layouts out of the box
+- **Live PDF preview**: not HTML, actual PDF output rendered in real time
+- **Wikilink support**: write multi-file projects with `[[filename]]` links that merge into a single PDF
+- **Built-in Typst templates**: professional layouts out of the box
 
 Available for **macOS** (**Windows** and **Linux** coming soon).
 
